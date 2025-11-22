@@ -1,0 +1,314 @@
+/* === GLOBALES Y RESET === */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f7fa; /* Fondo gris claro */
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1600px;
+    margin: 20px auto;
+    padding: 0 20px;
+    display: grid;
+    gap: 25px; /* Espacio entre todas las secciones */
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+h1 {
+    color: #2c3e50;
+}
+
+h2 {
+    color: #34495e;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+#api-status {
+    font-size: 0.9em;
+    color: #7f8c8d;
+}
+
+/* === ESTILO DE "WIDGETS" O "TARJETAS" === */
+.widget {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* === 1. RESUMEN DE TOTALES === */
+#dashboard-summary {
+    display: grid;
+    /* 4 columnas en desktop, 2 en tablet, 1 en móvil */
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.summary-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border-left: 5px solid; /* Borde de color */
+}
+
+.summary-card h3 {
+    margin-top: 0;
+    font-size: 1em;
+    color: #555;
+    font-weight: 500;
+}
+
+.summary-card p {
+    font-size: 1.75em;
+    margin: 0;
+    font-weight: 700;
+}
+
+/* Colores de borde y texto para las tarjetas */
+#summary-ingresos { border-color: #2ecc71; }
+#summary-ingresos p { color: #2ecc71; }
+
+#summary-gastos { border-color: #e74c3c; }
+#summary-gastos p { color: #e74c3c; }
+
+#summary-pendiente { border-color: #f39c12; }
+#summary-pendiente p { color: #f39c12; }
+
+#summary-saldo { border-color: #3498db; }
+#summary-saldo p { color: #3498db; }
+
+
+/* === 2. CONTENEDOR DE FORMULARIOS === */
+.form-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 25px;
+}
+
+.form-card form div {
+    margin-bottom: 15px;
+}
+
+.form-card form label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+.form-card form input[type="text"],
+.form-card form input[type="number"],
+.form-card form input[type="date"],
+.form-card form select,
+.form-card form textarea { /* <-- ESTA ES LA LÍNEA QUE AÑADIMOS */
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 1em;
+    /* (Opcional) Esto le da un buen tamaño inicial al textarea */
+    resize: vertical;
+    min-height: 60px;
+}
+
+/* === ESTILO PARA EL TOOLTIP DE OBSERVACIÓN === */
+.obs-tooltip {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #3498db;
+    cursor: help;
+    margin-left: 5px;
+    border-bottom: 1px dotted #3498db;
+}
+
+/* === 3. CONTENEDOR DE DASHBOARDS (Tablas) === */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr; 
+    gap: 25px;
+}
+
+/* === 4. ESTILOS DE TABLAS (Genérico) === */
+/* Se aplica a TODAS las tablas */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+table thead th {
+    background-color: #f9fafb;
+    padding: 12px 10px;
+    text-align: left;
+    font-size: 0.9em;
+    font-weight: 700;
+    color: #555;
+    border-bottom: 2px solid #eee;
+}
+
+table tbody td {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 10px;
+    vertical-align: middle;
+}
+
+table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* === BOTONES (Genérico) === */
+button, .btn-pagar {
+    font-family: inherit;
+    font-size: 1em;
+    font-weight: 500;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+/* Botón primario (azul) */
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+    width: 100%;
+}
+.btn-primary:hover {
+    background-color: #2980b9;
+}
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+/* Botón de Pagar (verde) */
+.btn-pagar {
+    background-color: #2ecc71;
+    color: white;
+    font-size: 0.9em;
+    padding: 8px 12px;
+}
+.btn-pagar:hover {
+    background-color: #27ae60;
+}
+
+.btn-pagar-cuota {
+    background-color: #f39c12;
+    color: white;
+    font-size: 0.9em;
+    padding: 8px 12px;
+}
+.btn-pagar-cuota:hover {
+    background-color: #e67e22;
+}
+
+
+/* === ESTADOS DE TEXTO === */
+.text-success { color: #2ecc71; }
+.text-danger { color: #e74c3c; }
+.text-warning { color: #f39c12; }
+
+/* === RESPONSIVE === */
+
+/* Tablets y móviles grandes */
+@media (max-width: 992px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr; /* Tablas una encima de otra */
+    }
+}
+
+/* Móviles */
+@media (max-width: 768px) {
+    body {
+        padding: 0;
+    }
+    .container {
+        margin: 0;
+        padding: 10px;
+        gap: 20px;
+    }
+    #dashboard-summary {
+        grid-template-columns: 1fr 1fr; /* 2 tarjetas por fila */
+    }
+    .form-container {
+        grid-template-columns: 1fr; /* Formularios uno encima de otro */
+    }
+    h1 {
+        font-size: 1.5em;
+    }
+    /* Reducir texto en móviles para que quepa */
+    .summary-card p {
+        font-size: 1.4em;
+    }
+    /* Ocultar cabeceras de tabla si se vuelve muy denso */
+    /* (Por ahora lo dejamos visible) */
+}
+
+/* Contenedor para botones de formulario (Guardar y Cancelar) */
+.form-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+.form-buttons button {
+    flex: 1; /* Ocupan el espacio disponible */
+}
+
+/* Botón Secundario (Gris para Cancelar) */
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+/* Estilos para los 3 botones de acción en las tablas */
+.btn-accion {
+    font-size: 1.1em;
+    padding: 5px 8px;
+    margin-right: 5px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background: none;
+    transition: background-color 0.2s, transform 0.1s;
+}
+.btn-accion:hover {
+    transform: scale(1.1);
+}
+
+/* Botones de acción específicos */
+.btn-editar-recurrente { color: #3498db; }
+.btn-editar-recurrente:hover { background-color: #ecf0f1; }
+
+.btn-eliminar-recurrente { color: #e74c3c; }
+.btn-eliminar-recurrente:hover { background-color: #ecf0f1; }
+
+/* Ocultar el botón de cancelar por defecto */
+#btn-cancelar-edicion {
+    display: none;
+}
+
+/* Botones de acción específicos para Cuotas */
+.btn-editar-cuota { color: #3498db; }
+.btn-editar-cuota:hover { background-color: #ecf0f1; }
+
+.btn-eliminar-cuota { color: #e74c3c; }
+.btn-eliminar-cuota:hover { background-color: #ecf0f1; }

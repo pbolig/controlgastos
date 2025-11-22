@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Mi Panel de Gastos</h1>
+            <div id="api-status">
+                <p>Cargando estado...</p>
+            </div>
+        </header>
+
+        <section id="dashboard-summary">
+            <div class="summary-card" id="summary-ingresos">
+                <h3>Ingresos del Mes</h3>
+                <p id="total-ingresos">$0.00</p>
+            </div>
+            <div class="summary-card" id="summary-gastos">
+                <h3>Gastos Pagados</h3>
+                <p id="total-gastos">$0.00</p>
+            </div>
+            <div class="summary-card" id="summary-pendiente">
+                <h3>Pendiente de Pago</h3>
+                <p id="total-pendiente">$0.00</p>
+            </div>
+            <div class="summary-card" id="summary-saldo">
+                <h3>Saldo Actual</h3>
+                <p id="saldo-actual">$0.00</p>
+            </div>
+        </section>
+
+        <div class="form-container">
+            <section class="widget form-card" id="nuevo-movimiento">
+                <h2>Registrar Movimiento</h2>
+                <form id="form-transaccion">
+                    <div>
+                        <label for="descripcion">Descripción:</label>
+                        <input type="text" id="descripcion" name="descripcion" required>
+                    </div>
+                    <div>
+                        <label for="monto">Monto:</label>
+                        <input type="number" id="monto" name="monto" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="tipo">Tipo:</label>
+                        <select id="tipo" name="tipo" required>
+                            <option value="gasto">Gasto</option>
+                            <option value="ingreso">Ingreso</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="categoria">Categoría:</label>
+                        <select id="categoria" name="categoria_id">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary">Agregar</button>
+                </form>
+                <div id="form-mensaje"></div>
+            </section>
+
+            <section class="widget form-card" id="nuevo-recurrente">
+                <h2 id="form-recurrente-titulo">Definir Gasto Recurrente</h2>
+                <form id="form-recurrente">
+                    <div>
+                        <label for="recurrente-descripcion">Descripción:</label>
+                        <input type="text" id="recurrente-descripcion" name="descripcion" required>
+                    </div>
+                    <div>
+                        <label for="recurrente-monto">Monto Estimado:</label>
+                        <input type="number" id="recurrente-monto" name="monto_estimado" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="recurrente-dia">Día Vencimiento:</label>
+                        <input type="number" id="recurrente-dia" name="dia_vencimiento" min="1" max="31" required>
+                    </div>
+                    <div>
+                        <label for="recurrente-categoria">Categoría:</label>
+                        <select id="recurrente-categoria" name="categoria_id" required>
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="recurrente-observacion">Observación (Opcional):</label>
+                        <textarea id="recurrente-observacion" name="observacion" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="form-buttons">
+                        <button type="submit" class="btn-primary" id="btn-submit-recurrente">Guardar Recurrente</button>
+                        <button type="button" class="btn-secondary" id="btn-cancelar-edicion">Cancelar</button>
+                    </div>
+                </form>
+                <div id="form-recurrente-mensaje"></div>
+            </section>
+            <section class="widget form-card" id="nuevo-plan-cuota">
+                <h2 id="form-cuota-titulo">Definir Plan de Cuotas</h2>
+                <form id="form-cuota">
+                    <div>
+                        <label for="cuota-descripcion">Descripción:</label>
+                        <input type="text" id="cuota-descripcion" name="descripcion" required>
+                    </div>
+                    <div>
+                        <label for="cuota-total">Monto Total:</label>
+                        <input type="number" id="cuota-total" name="monto_total" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="cuota-monto">Monto Cuota:</label>
+                        <input type="number" id="cuota-monto" name="monto_cuota" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="cuota-total-cuotas">Total Cuotas:</label>
+                        <input type="number" id="cuota-total-cuotas" name="total_cuotas" min="1" required>
+                    </div>
+                    <div>
+                        <label for="cuota-categoria">Categoría:</label>
+                        <select id="cuota-categoria" name="categoria_id" required>
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="cuota-fecha-inicio">Fecha Inicio:</label>
+                        <input type="date" id="cuota-fecha-inicio" name="fecha_inicio" required>
+                    </div>
+
+                    <div class="form-buttons">
+                        <button type="submit" class="btn-primary" id="btn-submit-cuota">Guardar Plan</button>
+                        <button type="button" class="btn-secondary" id="btn-cancelar-edicion-cuota">Cancelar</button>
+                    </div>
+                </form>
+                <div id="form-cuota-mensaje"></div>
+            </section>
+        </div>
+        
+        <div class="dashboard-grid">
+            <section class="widget" id="dashboard-recurrentes">
+                <h2>Gastos Recurrentes del Mes</h2>
+                <table id="tabla-recurrentes">
+                    <thead>
+                        <tr>
+                            <th>Descripción</th>
+                            <th>Categoría</th>
+                            <th>Vencimiento</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-recurrentes-body">
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="widget" id="dashboard-cuotas">
+                <h2>Planes de Cuotas Activos</h2>
+                <table id="tabla-cuotas">
+                    <thead>
+                        <tr>
+                            <th>Descripción</th>
+                            <th>Categoría</th>
+                            <th>Progreso</th>
+                            <th>Monto Cuota</th>
+                            <th>Estado Mes</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-cuotas-body"></tbody>
+                </table>
+            </section>
+        </div>
+
+        <section class="widget" id="historial-movimientos">
+            <h2>Historial de Movimientos</h2>
+            <table id="tabla-transacciones">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Categoría</th>
+                        <th>Tipo</th>
+                        <th>Monto</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-transacciones-body">
+                    </tbody>
+            </table>
+        </section>
+
+    </div> 
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>
