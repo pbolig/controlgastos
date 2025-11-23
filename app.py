@@ -9,7 +9,7 @@ app = Flask(__name__)
 app.config['DATABASE'] = os.path.join(app.instance_path, 'gastos.db')
 
 # --- VERSIÓN DE LA APP ---
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.1.0"
 
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
@@ -145,17 +145,20 @@ def get_transacciones():
 def agregar_recurrente():
     try:
         data = request.get_json()
+        # Por defecto es 'gasto' si no se especifica
+        tipo = data.get('tipo', 'gasto') 
+        
         if not all([data.get('descripcion'), data.get('monto_estimado'), data.get('dia_vencimiento'), data.get('categoria_id')]):
             return jsonify({ "error": "Faltan campos obligatorios." }), 400
         
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion) VALUES (?, ?, ?, ?, ?)",
-            (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'))
+            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo) VALUES (?, ?, ?, ?, ?, ?)",
+            (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'), tipo)
         )
         db.commit()
-        return jsonify({ "mensaje": "Gasto recurrente guardado", "id": cursor.lastrowid }), 201
+        return jsonify({ "mensaje": "Movimiento recurrente guardado", "id": cursor.lastrowid }), 201
     except Exception as e:
         return jsonify({ "error": f"Error: {e}" }), 500
 
@@ -165,27 +168,34 @@ def eliminar_recurrente(id):
     try:
         db = get_db()
         with db:
-            cursor = db.cursor()
-            cursor.execute("DELETE FROM pagos_recurrentes_log WHERE recurrente_id = ?", (id,))
-            cursor.execute("DELETE FROM gastos_recurrentes WHERE id = ?", (id,))
-            if cursor.rowcount == 0: return jsonify({ "error": "No encontrado." }), 404
-        return jsonify({ "mensaje": "Eliminado exitosamente" }), 200
-    except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
-
+            # Primero borramos el historial de pagos de este recurrente
+            db.execute("DELETE FROM pagos_recurrentes_log WHERE recurrente_id=?", (id,))
+            # Luego borramos el recurrente en sí
+            cursor = db.execute("DELETE FROM gastos_recurrentes WHERE id=?", (id,))
+            
+            if cursor.rowcount == 0:
+                return jsonify({ "error": "No encontrado" }), 404
+                
+        return jsonify({ "mensaje": "Eliminado correctamente" }), 200
+    except Exception as e: 
+        return jsonify({ "error": str(e) }), 500
+    
 @app.route('/api/recurrente/<int:id>', methods=['PUT'])
 @login_required
 def editar_recurrente(id):
     try:
-        data = request.get_json()
+        d = request.get_json()
+        tipo = d.get('tipo', 'gasto')
         db = get_db()
-        with db:
-            cursor = db.cursor()
-            cursor.execute(
-                "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=? WHERE id=?",
-                (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'), id)
-            )
-        return jsonify({ "mensaje": "Actualizado exitosamente" }), 200
-    except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+        cursor = db.cursor()
+        cursor.execute(
+            "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=?, tipo=? WHERE id=?",
+            (d['descripcion'], float(d['monto_estimado']), int(d['dia_vencimiento']), int(d['categoria_id']), d.get('observacion'), tipo, id)
+        )
+        db.commit()
+        return jsonify({ "mensaje": "Actualizado correctamente" }), 200
+    except Exception as e: 
+        return jsonify({ "error": str(e) }), 500
 
 @app.route('/api/recurrentes/status')
 @login_required
@@ -194,9 +204,11 @@ def get_recurrentes_status():
         hoy = datetime.date.today()
         db = get_db()
         cursor = db.cursor()
+        # Agregamos r.tipo a la consulta
         cursor.execute("""
-            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, c.nombre AS categoria_nombre, c.id AS categoria_id,
-            CASE WHEN l.id IS NOT NULL THEN 'Pagado' ELSE 'Pendiente' END AS status
+            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo, 
+            c.nombre AS categoria_nombre, c.id AS categoria_id,
+            CASE WHEN l.id IS NOT NULL THEN 'Procesado' ELSE 'Pendiente' END AS status
             FROM gastos_recurrentes AS r JOIN categorias AS c ON r.categoria_id = c.id
             LEFT JOIN pagos_recurrentes_log AS l ON r.id = l.recurrente_id AND l.mes = ? AND l.anio = ?
             ORDER BY r.dia_vencimiento ASC
@@ -214,14 +226,23 @@ def pagar_recurrente():
         cursor = db.cursor()
         with db:
             cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (data['recurrente_id'],))
-            gasto = cursor.fetchone()
-            desc = f"Pago recurrente: {gasto['descripcion']}"
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, 'gasto', ?, ?)",
-                           (desc, float(data['monto_pagado']), hoy, gasto['categoria_id']))
+            recurrente = cursor.fetchone()
+            
+            # Usamos el tipo del recurrente (ingreso o gasto)
+            tipo_movimiento = recurrente['tipo'] 
+            
+            # Texto dinámico según el tipo
+            accion_txt = "Cobro" if tipo_movimiento == 'ingreso' else "Pago"
+            desc = f"{accion_txt} recurrente: {recurrente['descripcion']}"
+            
+            # Insertamos usando el 'tipo_movimiento' correcto (esto arregla la resta/suma)
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, ?, ?, ?)",
+                           (desc, float(data['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id']))
+            
             new_id = cursor.lastrowid
             cursor.execute("INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
                            (data['recurrente_id'], new_id, hoy.month, hoy.year))
-        return jsonify({ "mensaje": "Pagado exitosamente" }), 201
+        return jsonify({ "mensaje": "Procesado exitosamente" }), 201
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
 
 # --- === API DASHBOARD === ---

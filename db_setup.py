@@ -49,11 +49,12 @@ try:
         monto_estimado REAL NOT NULL,
         dia_vencimiento INTEGER NOT NULL,
         categoria_id INTEGER NOT NULL,
-        observacion TEXT,  -- <-- ¡NUEVO CAMPO AÑADIDO!
+        observacion TEXT,
+        tipo TEXT DEFAULT 'gasto', -- <-- NUEVO CAMPO
         FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT
     )
     ''')
-    print("Tabla 'gastos_recurrentes' creada.")
+    print("Tabla 'gastos_recurrentes' (modificada) creada.")
     
     # Tabla 4: Log de Pagos Recurrentes (sin cambios)
     cursor.execute('''

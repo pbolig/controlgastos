@@ -2,41 +2,239 @@ Para activar entorno virtual en cmd como admin: .venv\Scripts\activate
 
 ejecutar en desarrollo --> python app.py
 
-1. ¿Cómo hacer un Backup de mis datos?
-Tu base de datos es solo un archivo. Para guardarlo, solo copia la carpeta de datos:
+Manual de Despliegue: Sistema de Control de Gastos
+Infraestructura: VPS CentOS 8 con Plesk Obsidian + Docker. Dominio: gastos.accesovirtual.com.ar Repositorio: https://github.com/pbolig/controlgastos
+
+1. Prerrequisitos del Sistema
+Instalación de las herramientas necesarias para el despliegue.
+
+Comandos:
 
 Bash
 
-# Copiar el archivo .db a tu carpeta personal o bajarlo por FTP
-cp /var/www/gastos-data/gastos.db /root/backup-gastos/backup_gastos_$(date +%F).db
+# Instalar Git
+yum install git -y
 
-2. ¿Cómo actualizar la App (si haces cambios en el código)?
-Si modificas el código en tu PC y lo subes a GitHub, estos son los pasos para actualizar el VPS:
+# Instalar Docker
+yum install docker-ce docker-ce-cli containerd.io -y
+
+# Habilitar y arrancar Docker
+systemctl start docker
+systemctl enable docker
+✅ Control y Verificación:
 
 Bash
 
-# 1. Ir a la carpeta
+# Verificar versión de Git
+git --version
+
+# Verificar que Docker está corriendo (debe decir "Active: active")
+systemctl status docker | grep Active
+2. Creación del Subdominio en Plesk
+Creamos el subdominio definiendo explícitamente una carpeta raíz personalizada (gastos) para aislarlo de la carpeta principal httpdocs.
+
+Comandos:
+
+Bash
+
+plesk bin subdomain --create gastos -domain accesovirtual.com.ar -www-root gastos
+✅ Control y Verificación:
+
+Bash
+
+# Verificar que Plesk reconoce el subdominio y la ruta correcta
+plesk bin subdomain --info gastos.accesovirtual.com.ar | grep "WWW-Root"
+# Resultado esperado: --WWW-Root--: /var/www/vhosts/accesovirtual.com.ar/gastos
+3. Descarga del Código Fuente
+Navegamos a la carpeta del subdominio, limpiamos los archivos por defecto y clonamos el repositorio.
+
+Comandos:
+
+Bash
+
+# Ir a la carpeta
 cd /var/www/vhosts/accesovirtual.com.ar/gastos
 
-# 2. Bajar cambios
-git pull
+# Limpiar archivo default de Plesk
+rm -f index.html
 
-# 3. Reconstruir la imagen (tarda unos segundos)
+# Clonar repo (el punto al final es obligatorio)
+git clone https://github.com/pbolig/controlgastos .
+✅ Control y Verificación:
+
+Bash
+
+# Listar archivos para confirmar que bajó el código
+ls -la
+# Resultado esperado: Debes ver 'app.py', 'Dockerfile', 'requirements.txt', etc.
+4. Construcción de la Imagen Docker
+Empaquetamos la aplicación y sus dependencias.
+
+Comandos:
+
+Bash
+
 docker build -t gastos-app .
+✅ Control y Verificación:
 
-# 4. Borrar el contenedor viejo (tranquilo, la DB está a salvo en la otra carpeta)
-docker rm -f control-gastos-container
+Bash
 
-# 5. Arrancar el nuevo
+# Verificar que la imagen se creó correctamente
+docker images | grep gastos-app
+# Resultado esperado: Una línea mostrando 'gastos-app' y su tamaño.
+5. Configuración de Persistencia
+Preparamos la carpeta externa donde se guardará la base de datos activa.
+
+Comandos:
+
+Bash
+
+mkdir -p /var/www/gastos-data
+✅ Control y Verificación:
+
+Bash
+
+ls -ld /var/www/gastos-data
+6. Ejecución del Contenedor
+Arrancamos la aplicación conectando puertos y volúmenes.
+
+Comandos: (Reemplazar TuClaveSecreta por la contraseña real)
+
+Bash
+
 docker run -d \
   --name control-gastos-container \
   --restart=always \
   -p 127.0.0.1:5000:5000 \
   -v /var/www/gastos-data:/app/instance \
+  -e APP_PASSWORD="TuClaveSecreta" \
   gastos-app
-3. ¿Cómo ver si hay errores?
-Si la app falla, puedes ver los logs de Python así:
+✅ Control y Verificación:
 
 Bash
 
-docker logs --tail 50 -f control-gastos-container
+# 1. Verificar que el contenedor está corriendo (STATUS Up)
+docker ps | grep control-gastos-container
+
+# 2. Verificar respuesta interna
+curl -I http://127.0.0.1:5000
+7. Inicialización de Base de Datos (Solo 1ra vez)
+Comandos:
+
+Bash
+
+docker exec control-gastos-container python db_setup.py
+✅ Control y Verificación:
+
+Bash
+
+# Confirmar existencia del archivo .db
+ls -l /var/www/gastos-data/gastos.db
+8. Configuración del Proxy Inverso (Nginx)
+Configuramos Nginx usando una regla Regex (~ ^/) para evitar conflictos con Plesk.
+
+a) Crear archivo de configuración:
+
+Bash
+
+cat <<EOF > /var/www/vhosts/system/gastos.accesovirtual.com.ar/conf/vhost_nginx.conf
+location ~ ^/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
+EOF
+b) Aplicar configuración en Plesk:
+
+Bash
+
+plesk sbin httpdmng --reconfigure-domain gastos.accesovirtual.com.ar
+✅ Control y Verificación:
+
+Bash
+
+# Verificar sintaxis
+nginx -t
+# Verificar respuesta HTTP externa (Debe devolver 200 o 302)
+curl -I http://gastos.accesovirtual.com.ar
+9. Certificado de Seguridad (SSL/HTTPS)
+Comandos:
+
+Bash
+
+plesk bin extension --exec letsencrypt cli.php -d gastos.accesovirtual.com.ar
+(Si falla la visualización tras esto, re-ejecutar el comando de reconfiguración del Paso 8b).
+
+✅ Control y Verificación Final:
+
+Bash
+
+curl -I https://gastos.accesovirtual.com.ar
+10. Automatización de Backups y Rotación
+Configuraremos un script que realiza una copia diaria y elimina automáticamente los backups que excedan los 3 días de antigüedad.
+
+a) Crear directorio de backups:
+
+Bash
+
+mkdir -p /var/www/gastos-backups
+b) Crear el script de backup: Copia y pega el siguiente bloque completo para crear el script:
+
+Bash
+
+cat <<EOF > /root/backup_gastos.sh
+#!/bin/bash
+
+# Configuración
+BACKUP_DIR="/var/www/gastos-backups"
+SOURCE_DB="/var/www/gastos-data/gastos.db"
+DATE=\$(date +%Y-%m-%d_%H%M%S)
+FILENAME="gastos_backup_\$DATE.db"
+
+# 1. Realizar la copia de seguridad
+cp \$SOURCE_DB \$BACKUP_DIR/\$FILENAME
+
+# 2. Rotación: Mantener solo los 3 archivos más recientes
+# (Lista por fecha descendente, salta los primeros 3 y borra el resto)
+ls -1t \$BACKUP_DIR/*.db | tail -n +4 | xargs -r rm -f
+
+EOF
+c) Dar permisos de ejecución:
+
+Bash
+
+chmod +x /root/backup_gastos.sh
+d) Probar el script manualmente: Ejecuta el script una vez para asegurar que funciona.
+
+Bash
+
+/root/backup_gastos.sh
+✅ Control y Verificación:
+
+Bash
+
+# Debería aparecer un archivo .db con la fecha de hoy
+ls -l /var/www/gastos-backups/
+e) Programar la Tarea Cron (Diaria a las 03:00 AM): Añadimos la tarea al crontab del usuario root.
+
+Bash
+
+(crontab -l 2>/dev/null; echo "0 3 * * * /root/backup_gastos.sh") | crontab -
+✅ Control y Verificación:
+
+Bash
+
+# Verificar que la tarea quedó guardada
+crontab -l | grep backup_gastos
+🔄 Rutina de Mantenimiento (Actualización)
+cd /var/www/vhosts/accesovirtual.com.ar/gastos
+
+git pull
+
+docker build -t gastos-app .
+
+docker rm -f control-gastos-container
+
+Ejecutar comando docker run del Paso 6.

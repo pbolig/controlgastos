@@ -87,6 +87,13 @@
                         <input type="number" id="recurrente-dia" name="dia_vencimiento" min="1" max="31" required>
                     </div>
                     <div>
+                        <label for="recurrente-tipo">Tipo:</label>
+                        <select id="recurrente-tipo" name="tipo" required>
+                            <option value="gasto">Gasto</option>
+                            <option value="ingreso">Ingreso</option>
+                        </select>
+                    </div>
+                    <div>
                         <label for="recurrente-categoria">Categoría:</label>
                         <select id="recurrente-categoria" name="categoria_id" required>
                             <option value="">Cargando...</option>
