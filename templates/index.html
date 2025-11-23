@@ -15,10 +15,11 @@
 
     <div class="container">
         <header>
-            <h1>Mi Panel de Gastos</h1>
+            <h1>Mi Panel de Gastos</h1>            
             <div id="api-status">
-                <p>Cargando estado...</p>
+                <p>Cargando estado...</p>                
             </div>
+            <a href="/logout" class="btn-secondary" style="text-decoration: none; padding: 8px 15px; font-size: 0.9em;">Salir 🔒</a>
         </header>
 
         <section id="dashboard-summary">
@@ -198,6 +199,12 @@
         </section>
 
     </div> 
+    <!-- Pie de página con versión -->
+    <footer style="text-align: center; margin: 40px 0 20px; color: #95a5a6; font-size: 0.85em;">
+        <p>Control de Gastos &copy; 2025 - Versión <strong>{{ version }}</strong></p>
+    </footer>
+
+    <!-- Tu script (ya estaba ahí) -->
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </body>
 </html>

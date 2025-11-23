@@ -1,0 +1,42 @@
+Para activar entorno virtual en cmd como admin: .venv\Scripts\activate
+
+ejecutar en desarrollo --> python app.py
+
+1. ¿Cómo hacer un Backup de mis datos?
+Tu base de datos es solo un archivo. Para guardarlo, solo copia la carpeta de datos:
+
+Bash
+
+# Copiar el archivo .db a tu carpeta personal o bajarlo por FTP
+cp /var/www/gastos-data/gastos.db /root/backup-gastos/backup_gastos_$(date +%F).db
+
+2. ¿Cómo actualizar la App (si haces cambios en el código)?
+Si modificas el código en tu PC y lo subes a GitHub, estos son los pasos para actualizar el VPS:
+
+Bash
+
+# 1. Ir a la carpeta
+cd /var/www/vhosts/accesovirtual.com.ar/gastos
+
+# 2. Bajar cambios
+git pull
+
+# 3. Reconstruir la imagen (tarda unos segundos)
+docker build -t gastos-app .
+
+# 4. Borrar el contenedor viejo (tranquilo, la DB está a salvo en la otra carpeta)
+docker rm -f control-gastos-container
+
+# 5. Arrancar el nuevo
+docker run -d \
+  --name control-gastos-container \
+  --restart=always \
+  -p 127.0.0.1:5000:5000 \
+  -v /var/www/gastos-data:/app/instance \
+  gastos-app
+3. ¿Cómo ver si hay errores?
+Si la app falla, puedes ver los logs de Python así:
+
+Bash
+
+docker logs --tail 50 -f control-gastos-container

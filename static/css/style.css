@@ -48,6 +48,7 @@ h2 {
     border-radius: 8px;
     padding: 25px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    overflow-x: auto;
 }
 
 /* === 1. RESUMEN DE TOTALES === */
@@ -312,3 +313,30 @@ button, .btn-pagar {
 
 .btn-eliminar-cuota { color: #e74c3c; }
 .btn-eliminar-cuota:hover { background-color: #ecf0f1; }
+
+/* 2. Ajustes para pantallas pequeñas (Móviles) */
+@media (max-width: 600px) {
+    .container {
+        padding: 10px; /* Menos margen para aprovechar pantalla */
+    }
+    
+    header {
+        flex-direction: column; /* Título arriba, botón salir abajo */
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    header div {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Hacer los inputs y botones más grandes para dedos */
+    input, select, button, .btn-pagar, .btn-accion {
+        min-height: 44px; /* Tamaño mínimo recomendado por Apple/Google */
+    }
+    
+    /* Ocultar columnas menos importantes en móvil si quisieras (Opcional) */
+    /* #tabla-transacciones th:nth-child(3), 
+       #tabla-transacciones td:nth-child(3) { display: none; } */
+}
