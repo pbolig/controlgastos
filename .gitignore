@@ -1,0 +1,25 @@
+Entorno Virtual
+
+venv/
+*.env
+.env
+
+docs/
+
+Archivos de Python
+
+pycache/
+*.pyc
+*.pyo
+*.pyd
+
+Archivos de Django
+
+*.log
+db.sqlite3
+db.sqlite3-journal
+
+Archivos del SO
+
+.DS_Store
+Thumbs.db

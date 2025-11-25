@@ -350,6 +350,52 @@ def editar_cuota(id):
         db.commit()
         return jsonify({ "mensaje": "Actualizado" }), 200
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+    
+@app.route('/reportes')
+@login_required
+def reportes():
+    return render_template('reportes.html', version=APP_VERSION)
+
+@app.route('/api/reportes/filtrar', methods=['POST'])
+@login_required
+def filtrar_reportes():
+    try:
+        data = request.get_json()
+        # ¡AQUÍ ESTABA EL ERROR! Ahora usamos strftime para que el JS reciba la fecha limpia
+        query = """
+            SELECT t.id, t.descripcion, t.monto, t.tipo, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre
+            FROM transacciones t
+            LEFT JOIN categorias c ON t.categoria_id = c.id
+            WHERE 1=1
+        """
+        params = []
+
+        if data.get('fecha_desde'):
+            query += " AND t.fecha >= ?"
+            params.append(data['fecha_desde'])
+        
+        if data.get('fecha_hasta'):
+            query += " AND t.fecha <= ?"
+            params.append(data['fecha_hasta'])
+            
+        if data.get('tipo') and data['tipo'] != 'todos':
+            query += " AND t.tipo = ?"
+            params.append(data['tipo'])
+
+        if data.get('categoria_id'):
+            query += " AND t.categoria_id = ?"
+            params.append(int(data['categoria_id']))
+
+        query += " ORDER BY t.fecha DESC"
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute(query, params)
+        
+        return jsonify([dict(f) for f in cursor.fetchall()]), 200
+
+    except Exception as e:
+        return jsonify({ "error": str(e) }), 500
 
 # --- INICIO SERVIDOR ---
 if __name__ == '__main__':

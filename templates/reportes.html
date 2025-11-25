@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportes - Control de Gastos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Librería para el gráfico (Chart.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div style="display:flex; align-items:center; gap:15px;">
+                <!-- Botón para volver al inicio -->
+                <a href="/" class="btn-secondary" style="text-decoration:none;">⬅ Volver</a>
+                <h1>Reportes y Análisis</h1>
+            </div>
+        </header>
+
+        <!-- 1. FILTROS -->
+        <section class="widget">
+            <h2>Filtros de Búsqueda</h2>
+            <form id="form-filtros" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
+                <div>
+                    <label>Desde:</label>
+                    <input type="date" name="fecha_desde" id="f-desde">
+                </div>
+                <div>
+                    <label>Hasta:</label>
+                    <input type="date" name="fecha_hasta" id="f-hasta">
+                </div>
+                <div>
+                    <label>Tipo:</label>
+                    <select name="tipo" id="f-tipo">
+                        <option value="todos">Todos</option>
+                        <option value="gasto">Gastos</option>
+                        <option value="ingreso">Ingresos</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Categoría:</label>
+                    <select name="categoria_id" id="f-categoria">
+                        <option value="">Todas</option>
+                        <!-- JS cargará las categorías aquí -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">🔍 Filtrar</button>
+            </form>
+        </section>
+
+        <div class="dashboard-grid">
+            <!-- 2. GRÁFICO DE TORTA -->
+            <section class="widget">
+                <h2>Distribución por Categoría</h2>
+                <div style="height: 300px; display: flex; justify-content: center;">
+                    <canvas id="miGrafico"></canvas>
+                </div>
+            </section>
+
+            <!-- 3. TABLA DE RESULTADOS -->
+            <section class="widget">
+                <h2>Detalle de Movimientos</h2>
+                <div style="overflow-x: auto;">
+                    <table id="tabla-resultados">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripción</th>
+                                <th>Categoría</th>
+                                <th>Tipo</th>
+                                <th>Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="body-resultados">
+                            <tr><td colspan="5" style="text-align:center;">Selecciona filtros para ver datos.</td></tr>
+                        </tbody>
+                        <tfoot>
+                            <tr style="background-color: #f0f0f0; font-weight: bold;">
+                                <td colspan="4" style="text-align:right;">TOTAL:</td>
+                                <td id="total-filtrado">$0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+    </div>
+
+    <!-- Script Específico para Reportes -->
+    <script src="{{ url_for('static', filename='js/reportes.js') }}"></script>
+</body>
+</html>
