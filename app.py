@@ -272,14 +272,19 @@ def get_dashboard_summary():
 def agregar_plan_cuota():
     try:
         d = request.get_json()
-        fecha = datetime.date.fromisoformat(d['fecha_inicio'])
+        f = datetime.date.fromisoformat(d['fecha_inicio'])
+        # Capturamos el ID de la tarjeta (puede venir vacío)
+        rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
+        
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, cuota_actual) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                       (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), fecha, int(d['categoria_id'])))
+        cursor.execute(
+            "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual) VALUES (?,?,?,?,?,?,?,0)",
+            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), f, int(d['categoria_id']), rec_id)
+        )
         db.commit()
         return jsonify({ "mensaje": "Plan guardado" }), 201
-    except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+    except Exception as e: return jsonify({ "error": str(e) }), 500
 
 @app.route('/api/cuotas/status')
 @login_required
@@ -288,14 +293,15 @@ def get_cuotas_status():
         hoy = datetime.date.today()
         db = get_db()
         cursor = db.cursor()
+        # Agregamos p.recurrente_id a la consulta
         cursor.execute("""
             SELECT p.*, c.nombre AS categoria_nombre,
-            CASE WHEN p.ultimo_pago_anio = ? AND p.ultimo_pago_mes = ? THEN 'Pagado este mes' ELSE 'Pendiente este mes' END AS status_mes
-            FROM planes_cuotas AS p JOIN categorias AS c ON p.categoria_id = c.id
+            CASE WHEN p.ultimo_pago_anio = ? AND p.ultimo_pago_mes = ? THEN 'Pagado este mes' ELSE 'Pendiente este mes' END as status_mes
+            FROM planes_cuotas p JOIN categorias c ON p.categoria_id = c.id
             WHERE p.cuota_actual < p.total_cuotas ORDER BY p.id ASC
         """, (hoy.year, hoy.month))
         return jsonify([dict(f) for f in cursor.fetchall()]), 200
-    except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+    except Exception as e: return jsonify({ "error": str(e) }), 500
 
 @app.route('/api/cuota/pagar', methods=['POST'])
 @login_required
@@ -339,17 +345,20 @@ def eliminar_cuota(id):
 
 @app.route('/api/cuota/<int:id>', methods=['PUT'])
 @login_required
-def editar_cuota(id):
+def editar_plan_cuota(id):
     try:
         d = request.get_json()
-        fecha = datetime.date.fromisoformat(d['fecha_inicio'])
+        f = datetime.date.fromisoformat(d['fecha_inicio'])
+        rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
+
         db = get_db()
-        cursor = db.cursor()
-        cursor.execute("UPDATE planes_cuotas SET descripcion=?, monto_total=?, monto_cuota=?, total_cuotas=?, categoria_id=?, fecha_inicio=? WHERE id=?",
-                       (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), int(d['categoria_id']), fecha, id))
+        db.execute(
+            "UPDATE planes_cuotas SET descripcion=?, monto_total=?, monto_cuota=?, total_cuotas=?, categoria_id=?, fecha_inicio=?, recurrente_id=? WHERE id=?",
+            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), int(d['categoria_id']), f, rec_id, id)
+        )
         db.commit()
         return jsonify({ "mensaje": "Actualizado" }), 200
-    except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+    except Exception as e: return jsonify({ "error": str(e) }), 500
     
 @app.route('/reportes')
 @login_required
@@ -393,6 +402,66 @@ def filtrar_reportes():
         cursor.execute(query, params)
         
         return jsonify([dict(f) for f in cursor.fetchall()]), 200
+
+    except Exception as e:
+        return jsonify({ "error": str(e) }), 500
+    
+# --- API: PAGO DE TARJETA ---
+@app.route('/api/tarjeta/pagar-resumen', methods=['POST'])
+@login_required
+def pagar_resumen_tarjeta():
+    try:
+        data = request.get_json()
+        recurrente_id = data.get('recurrente_id')
+        ids_cuotas = data.get('planes_ids', []) # Lista de IDs de planes a avanzar
+        monto_otros = float(data.get('monto_otros', 0))
+        monto_total = float(data.get('monto_total', 0))
+
+        hoy = datetime.date.today()
+        db = get_db()
+        cursor = db.cursor()
+
+        with db:
+            # 1. Obtener info del recurrente (La tarjeta en sí)
+            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (recurrente_id,))
+            tarjeta = cursor.fetchone()
+            if not tarjeta: return jsonify({"error": "Tarjeta no encontrada"}), 404
+
+            # 2. Procesar los planes de cuotas seleccionados
+            nombres_planes = []
+            for plan_id in ids_cuotas:
+                # Avanzamos 1 cuota a cada plan
+                cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (plan_id,))
+                plan = cursor.fetchone()
+                if plan:
+                    nombres_planes.append(plan['descripcion'])
+                    cursor.execute(
+                        "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
+                        (hoy.month, hoy.year, plan_id)
+                    )
+
+            # 3. Crear la descripción de la transacción
+            detalles = ", ".join(nombres_planes)
+            desc = f"Resumen {tarjeta['descripcion']}"
+            if detalles:
+                desc += f" (Cuotas: {detalles})"
+            if monto_otros > 0:
+                desc += " + Consumos varios"
+
+            # 4. Insertar la transacción ÚNICA por el total
+            cursor.execute(
+                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, 'gasto', ?, ?)",
+                (desc, monto_total, hoy, tarjeta['categoria_id'])
+            )
+            transaccion_id = cursor.lastrowid
+
+            # 5. Marcar el recurrente como pagado este mes
+            cursor.execute(
+                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
+                (recurrente_id, transaccion_id, hoy.month, hoy.year)
+            )
+
+        return jsonify({ "mensaje": "Resumen de tarjeta pagado y cuotas actualizadas." }), 201
 
     except Exception as e:
         return jsonify({ "error": str(e) }), 500

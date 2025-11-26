@@ -1,30 +1,27 @@
 import sqlite3
 import os
 
-# Ruta a tu base de datos local
 DB_PATH = os.path.join('instance', 'gastos.db')
 
 def migrar_db():
     if not os.path.exists(DB_PATH):
-        print(f"Error: No se encontró la base de datos en {DB_PATH}")
+        print(f"Error: No se encontró {DB_PATH}")
         return
 
-    print(f"Conectando a {DB_PATH}...")
     con = sqlite3.connect(DB_PATH)
     cursor = con.cursor()
 
     try:
-        # Intentamos agregar la columna 'tipo'
-        print("Intentando agregar columna 'tipo' a 'gastos_recurrentes'...")
-        cursor.execute("ALTER TABLE gastos_recurrentes ADD COLUMN tipo TEXT DEFAULT 'gasto'")
+        print("Intentando vincular Cuotas con Tarjetas...")
+        # Agregamos el campo recurrente_id (puede ser NULL si es un plan en efectivo)
+        cursor.execute("ALTER TABLE planes_cuotas ADD COLUMN recurrente_id INTEGER REFERENCES gastos_recurrentes(id) ON DELETE SET NULL")
         con.commit()
-        print("¡Éxito! Columna agregada correctamente.")
-        
+        print("¡Éxito! Columna 'recurrente_id' agregada.")
     except sqlite3.OperationalError as e:
         if "duplicate column" in str(e):
-            print("Aviso: La columna 'tipo' ya existía. No se hicieron cambios.")
+            print("Aviso: La columna ya existía.")
         else:
-            print(f"Error inesperado: {e}")
+            print(f"Error: {e}")
     finally:
         con.close()
 

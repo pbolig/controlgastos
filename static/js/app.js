@@ -191,22 +191,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
             data.forEach(r => {
                 const tr = document.createElement('tr');
-                const procesado = r.status === 'Procesado' || r.status === 'Pagado'; // Compatibilidad
+                const procesado = r.status === 'Procesado' || r.status === 'Pagado';
                 const estilo = procesado ? 'color: green;' : 'color: orange;';
                 
                 let btn = '';
                 if (!procesado) {
-                    // LÓGICA DINÁMICA: COBRAR (Verde) vs PAGAR (Original)
-                    const txt = r.tipo === 'ingreso' ? 'Cobrar' : 'Pagar';
-                    const cls = r.tipo === 'ingreso' ? 'btn-cobrar' : 'btn-pagar';
-                    btn = `<button class="${cls}" data-id="${r.id}" data-monto="${r.monto_estimado}" data-desc="${r.descripcion}" data-tipo="${r.tipo}">${txt}</button>`;
+                    if (r.tipo === 'tarjeta') {
+                        // BOTÓN ESPECIAL TARJETA
+                        btn = `<button class="btn-tarjeta" data-id="${r.id}" data-desc="${r.descripcion}" style="background:#8e44ad; color:white; border:none; padding:8px 12px; border-radius:5px; cursor:pointer;">Resumen 💳</button>`;
+                    } else {
+                        // BOTONES NORMALES
+                        const txt = r.tipo === 'ingreso' ? 'Cobrar' : 'Pagar';
+                        const cls = r.tipo === 'ingreso' ? 'btn-cobrar' : 'btn-pagar';
+                        btn = `<button class="${cls}" data-id="${r.id}" data-monto="${r.monto_estimado}" data-desc="${r.descripcion}" data-tipo="${r.tipo}">${txt}</button>`;
+                    }
                 } else {
                     btn = '<span class="text-success">Listo</span>';
                 }
 
                 const obsIcon = (r.observacion && r.observacion.trim()) ? ` <span class="obs-tooltip" title="${r.observacion}">ℹ️</span>` : '';
-
-                // Guardamos JSON en data-atributo para editar fácil
                 const jsonData = JSON.stringify(r).replace(/"/g, '&quot;');
 
                 tr.innerHTML = `
@@ -231,12 +234,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const target = e.target.closest('button');
             if (!target) return;
 
-            // 1. Pagar / Cobrar
-            if (target.classList.contains('btn-pagar') || target.classList.contains('btn-cobrar')) {
+            // A. PAGO DE TARJETA (NUEVO)
+            if (target.classList.contains('btn-tarjeta')) {
+                abrirModalTarjeta(target.dataset.id, target.dataset.desc);
+            }
+            // B. PAGO NORMAL
+            else if (target.classList.contains('btn-pagar') || target.classList.contains('btn-cobrar')) {
                 const { id, monto, desc, tipo } = target.dataset;
                 const accion = tipo === 'ingreso' ? 'cobro' : 'pago';
                 const real = prompt(`Confirmar ${accion} de "${desc}". Monto real:`, monto);
-                
                 if (real && !isNaN(real) && real > 0) {
                     target.disabled = true; target.textContent = '...';
                     fetch('/api/recurrente/pagar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ recurrente_id: id, monto_pagado: real }) })
@@ -247,19 +253,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     }).catch(err => { mostrarMensaje(`Error: ${err.message}`); target.disabled = false; });
                 }
             }
-            // 2. Eliminar
+            // C. ELIMINAR
             else if (target.classList.contains('btn-eliminar-recurrente')) {
                 mostrarConfirmacion(`¿Eliminar "${target.dataset.desc}"?`).then(ok => {
-                    if (ok) {
-                        fetch(`/api/recurrente/${target.dataset.id}`, { method: 'DELETE' })
-                        .then(r => r.json()).then(d => {
-                            if(d.error) throw new Error(d.error);
-                            mostrarMensaje(d.mensaje); cargarRecurrentesStatus(); cargarDashboardSummary();
-                        });
-                    }
+                    if (ok) fetch(`/api/recurrente/${target.dataset.id}`, { method: 'DELETE' }).then(r => r.json()).then(d => { 
+                        if(d.error) throw new Error(d.error); mostrarMensaje(d.mensaje); cargarRecurrentesStatus(); cargarDashboardSummary();
+                    });
                 });
             }
-            // 3. Editar
+            // D. EDITAR
             else if (target.classList.contains('btn-editar-recurrente')) {
                 const data = JSON.parse(target.dataset.json);
                 document.getElementById('recurrente-descripcion').value = data.descripcion;
@@ -267,7 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('recurrente-dia').value = data.dia_vencimiento;
                 document.getElementById('recurrente-categoria').value = data.categoria_id;
                 document.getElementById('recurrente-observacion').value = data.observacion || '';
-                if (selectRecurrenteTipo) selectRecurrenteTipo.value = data.tipo || 'gasto';
+                const selTipo = document.getElementById('recurrente-tipo');
+                if (selTipo) selTipo.value = data.tipo || 'gasto';
 
                 formRecurrenteTitulo.textContent = 'Editar Gasto Recurrente';
                 btnSubmitRecurrente.textContent = 'Actualizar';
@@ -277,6 +280,123 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // --- LÓGICA DEL MODAL TARJETA ---
+    const modalTarjeta = document.getElementById('modal-tarjeta');
+    const formPagoTarjeta = document.getElementById('form-pago-tarjeta');
+    const divListaCuotas = document.getElementById('lista-cuotas-tarjeta');
+    const inputOtros = document.getElementById('tarjeta-otros-consumos');
+    const spanTotalTarjeta = document.getElementById('tarjeta-total-pagar');
+    const loadingTarjeta = document.getElementById('modal-tarjeta-loading');
+    const btnCerrarModalTarjeta = document.getElementById('btn-cerrar-modal-tarjeta');
+
+    function abrirModalTarjeta(idRecurrente, nombreTarjeta) {
+        modalTarjeta.style.display = 'flex';
+        setTimeout(() => modalTarjeta.style.opacity = '1', 10); // Animación
+        document.getElementById('tarjeta-recurrente-id').value = idRecurrente;
+        
+        // Resetear
+        formPagoTarjeta.style.display = 'none';
+        loadingTarjeta.style.display = 'block';
+        divListaCuotas.innerHTML = '';
+        inputOtros.value = 0;
+        spanTotalTarjeta.textContent = "$0.00";
+
+        // Traer cuotas pendientes
+        fetch('/api/cuotas/status').then(r => r.json()).then(data => {
+            loadingTarjeta.style.display = 'none';
+            formPagoTarjeta.style.display = 'block';
+            
+            // Filtramos solo las pendientes
+            const pendientes = data.filter(p => p.status_mes.includes('Pendiente'));
+            
+            if (pendientes.length === 0) {
+                divListaCuotas.innerHTML = '<p style="padding:10px; color:#777;">No hay cuotas pendientes este mes.</p>';
+            } else {
+                pendientes.forEach(p => {
+                    const div = document.createElement('div');
+                    div.style.padding = "5px";
+                    div.style.borderBottom = "1px solid #eee";
+                    div.innerHTML = `
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" class="check-cuota" 
+                                value="${p.id}" 
+                                data-monto="${p.monto_cuota}" 
+                                checked 
+                                style="width:auto; margin-right:10px;">
+                            <div>
+                                <strong>${p.descripcion}</strong> <br>
+                                <small>Cuota ${p.cuota_actual}/${p.total_cuotas} - ${formatearMoneda(p.monto_cuota)}</small>
+                            </div>
+                        </label>
+                    `;
+                    divListaCuotas.appendChild(div);
+                });
+            }
+            calcularTotalTarjeta();
+        });
+    }
+
+    function calcularTotalTarjeta() {
+        let total = 0;
+        // Sumar cuotas checkeadas
+        document.querySelectorAll('.check-cuota:checked').forEach(chk => {
+            total += parseFloat(chk.dataset.monto);
+        });
+        // Sumar otros consumos
+        const otros = parseFloat(inputOtros.value) || 0;
+        total += otros;
+        
+        spanTotalTarjeta.textContent = formatearMoneda(total);
+        return total;
+    }
+
+    if (modalTarjeta) {
+        // Eventos para recalcular
+        divListaCuotas.addEventListener('change', calcularTotalTarjeta);
+        inputOtros.addEventListener('input', calcularTotalTarjeta);
+
+        // Cerrar
+        const cerrar = () => {
+            modalTarjeta.style.opacity = '0';
+            setTimeout(() => modalTarjeta.style.display = 'none', 200);
+        };
+        if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', cerrar);
+
+        // Enviar Pago
+        formPagoTarjeta.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
+            const planesIds = Array.from(document.querySelectorAll('.check-cuota:checked')).map(c => c.value);
+            const montoOtros = document.getElementById('tarjeta-otros-consumos').value;
+            const total = calcularTotalTarjeta(); // Reutilizamos la función que suma
+
+            if (total <= 0) {
+                alert("El monto total debe ser mayor a 0.");
+                return;
+            }
+
+            if (!confirm(`¿Confirmar pago total de tarjeta por ${formatearMoneda(total)}?`)) return;
+
+            fetch('/api/tarjeta/pagar-resumen', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    recurrente_id: recurrenteId,
+                    planes_ids: planesIds,
+                    monto_otros: montoOtros,
+                    monto_total: total
+                })
+            })
+            .then(r => r.json()).then(d => {
+                if(d.error) throw new Error(d.error);
+                mostrarMensaje(d.mensaje);
+                cerrar();
+                cargarRecurrentesStatus(); cargarTransacciones(); cargarDashboardSummary(); cargarCuotasStatus();
+            }).catch(err => alert(err.message));
+        });
+    }
+    // --- FIN LÓGICA DEL MODAL TARJETA ---
 
     // --- 6. PLANES DE CUOTAS ---
 
