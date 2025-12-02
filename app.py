@@ -9,7 +9,7 @@ app = Flask(__name__)
 app.config['DATABASE'] = os.path.join(app.instance_path, 'gastos.db')
 
 # --- VERSIÓN DE LA APP ---
-APP_VERSION = "v1.1.0"
+APP_VERSION = "v1.2.0"
 
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
@@ -204,17 +204,67 @@ def get_recurrentes_status():
         hoy = datetime.date.today()
         db = get_db()
         cursor = db.cursor()
-        # Agregamos r.tipo a la consulta
         cursor.execute("""
-            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo, 
+            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo,
             c.nombre AS categoria_nombre, c.id AS categoria_id,
-            CASE WHEN l.id IS NOT NULL THEN 'Procesado' ELSE 'Pendiente' END AS status
-            FROM gastos_recurrentes AS r JOIN categorias AS c ON r.categoria_id = c.id
+            CASE 
+                WHEN l.id IS NOT NULL AND l.transaccion_id IS NULL THEN 'Omitido' -- Nueva lógica
+                WHEN l.id IS NOT NULL THEN 'Procesado' 
+                ELSE 'Pendiente' 
+            END AS status
+            FROM gastos_recurrentes AS r 
+            JOIN categorias AS c ON r.categoria_id = c.id
             LEFT JOIN pagos_recurrentes_log AS l ON r.id = l.recurrente_id AND l.mes = ? AND l.anio = ?
             ORDER BY r.dia_vencimiento ASC
         """, (hoy.month, hoy.year))
         return jsonify([dict(fila) for fila in cursor.fetchall()]), 200
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
+    
+@app.route('/api/recurrente/omitir', methods=['POST'])
+@login_required
+def omitir_recurrente():
+    """Marca un recurrente como 'Saltado' este mes (sin movimiento de dinero)"""
+    try:
+        data = request.get_json()
+        recurrente_id = data.get('recurrente_id')
+        hoy = datetime.date.today()
+        
+        db = get_db()
+        cursor = db.cursor()
+        with db:
+            # Insertamos en el log pero con transaccion_id NULL (o None en Python)
+            cursor.execute(
+                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
+                (recurrente_id, None, hoy.month, hoy.year)
+            )
+        return jsonify({ "mensaje": "Gasto omitido por este mes." }), 201
+    except Exception as e: return jsonify({ "error": str(e) }), 500
+    
+@app.route('/api/recurrente/historial/<int:id>', methods=['GET'])
+@login_required
+def historial_recurrente(id):
+    """Devuelve los últimos 6 pagos reales de este recurrente"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT t.fecha, t.monto, t.descripcion
+            FROM pagos_recurrentes_log l
+            JOIN transacciones t ON l.transaccion_id = t.id
+            WHERE l.recurrente_id = ?
+            ORDER BY t.fecha DESC
+            LIMIT 6
+        """, (id,))
+        historial = [dict(f) for f in cursor.fetchall()]
+        # Formateamos fecha para el frontend
+        for h in historial:
+            # Convertir objeto date a string si es necesario, o formatear string
+            if isinstance(h['fecha'], str): # Si viene como string YYYY-MM-DD
+                parts = h['fecha'].split('-')
+                h['fecha'] = f"{parts[2]}/{parts[1]}/{parts[0]}"
+        
+        return jsonify(historial), 200
+    except Exception as e: return jsonify({ "error": str(e) }), 500
 
 @app.route('/api/recurrente/pagar', methods=['POST'])
 @login_required

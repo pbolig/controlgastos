@@ -253,6 +253,33 @@
     </div>
     <!-- === FIN MODAL DE PAGO DE TARJETA === -->
 
+    <!-- === MODAL DE HISTORIAL === -->
+    <div id="modal-historial" class="confirm-overlay" style="display: none; opacity: 0;">
+        <div class="confirm-dialog" style="max-width: 400px; text-align: left;">
+            <h3 style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                Historial (Últimos 6)
+            </h3>
+            <div id="historial-loading" style="text-align:center; padding:10px;">Cargando...</div>
+            
+            <table style="width:100%; font-size:0.9em; border-collapse: collapse;" id="tabla-historial-contenido">
+                <thead>
+                    <tr style="background:#f9f9f9; text-align:left;">
+                        <th style="padding:5px;">Fecha</th>
+                        <th style="padding:5px;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- JS rellena esto -->
+                </tbody>
+            </table>
+
+            <div style="margin-top: 20px; text-align: right;">
+                <button type="button" class="btn-secondary" id="btn-cerrar-historial">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    <!-- === FIN MODAL DE HISTORIAL === -->
+
     <!-- Pie de página con versión -->
     <footer style="text-align: center; margin: 40px 0 20px; color: #95a5a6; font-size: 0.85em;">
         <p>Control de Gastos &copy; 2025 - Versión <strong>{{ version }}</strong></p>
