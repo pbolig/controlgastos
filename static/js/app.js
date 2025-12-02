@@ -158,6 +158,23 @@ document.addEventListener('DOMContentLoaded', () => {
     async function cargarDashboardSummary() {
         try {
             const d = await apiCall('/api/dashboard/summary');
+
+            // FIX: La función 'update' se había perdido en la refactorización. La redefinimos aquí.
+            function update(card, sel_ars, val_ars, sel_usd, val_usd) {
+                if(card) {
+                    const el_ars = card.querySelector(sel_ars);
+                    const el_usd = card.querySelector(sel_usd);
+                    if(el_ars) {
+                        el_ars.textContent = formatearMoneda(val_ars, 'ARS');
+                        if(sel_ars.includes('saldo')) el_ars.style.color = val_ars < 0 ? '#e74c3c' : '#2980b9';
+                    }
+                    if(el_usd) {
+                        el_usd.textContent = formatearMoneda(val_usd, 'USD');
+                        if(sel_usd.includes('saldo')) el_usd.style.color = val_usd < 0 ? '#e74c3c' : '#27ae60';
+                    }
+                }
+            }
+
             update(cardIngresos, '.val-ars', d.ARS.ingresos, '.val-usd', d.USD.ingresos);
             update(cardGastos, '.val-ars', d.ARS.gastos, '.val-usd', d.USD.gastos);
             update(cardPendiente, '.val-ars', d.ARS.pendiente, '.val-usd', d.USD.pendiente);
