@@ -413,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const accion = Object.keys(mapaDeAcciones).find(clase => target.classList.contains(clase));
         if (accion) {
             e.preventDefault();
-            mapaDeAccionesaccion;
+            mapaDeAcciones[accion](target);
         }
     }
 
