@@ -7,9 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const tablaBody = document.getElementById('body-resultados');
     const totalEl = document.getElementById('total-filtrado');
     const canvas = document.getElementById('miGrafico');
+    const divControlesGrafico = document.querySelector('.grafico-controles');
     const ctx = canvas.getContext('2d');
 
     let chartInstance = null;
+    let transaccionesActuales = []; // Guardamos los datos para no volver a pedirlos
 
     // --- 1. CARGAR CATEGORÍAS EN EL FILTRO ---
     fetch('/api/categorias')
@@ -42,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(r => r.json())
         .then(transacciones => {
             renderizarTabla(transacciones);
-            renderizarGrafico(transacciones);
+            transaccionesActuales = transacciones; // Guardamos los datos
+            renderizarGrafico(); // Renderizamos con la moneda seleccionada por defecto
         })
         .catch(err => {
             console.error(err);
@@ -50,14 +53,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // --- NUEVO: Escuchar cambios en el selector de moneda del gráfico ---
+    divControlesGrafico.addEventListener('change', () => {
+        renderizarGrafico(); // Volver a dibujar el gráfico con la nueva moneda
+    });
+
+    // --- Función auxiliar para formatear moneda ---
+    function formatearMoneda(numero, moneda = 'ARS') {
+        const num = parseFloat(numero);
+        if (isNaN(num)) return "$0.00";
+        const currencyCode = moneda.toUpperCase() === 'USD' ? 'USD' : 'ARS';
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: currencyCode }).format(num);
+    }
+
     // --- 3. RENDERIZAR TABLA ---
     function renderizarTabla(datos) {
         tablaBody.innerHTML = '';
-        let balanceTotal = 0;
+        let balanceTotalARS = 0, balanceTotalUSD = 0;
 
         if (datos.length === 0) {
             tablaBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#777;">No se encontraron movimientos con estos filtros.</td></tr>';
-            totalEl.textContent = "$0.00";
+            totalEl.textContent = formatearMoneda(0, 'ARS');
             if (chartInstance) chartInstance.destroy(); // Limpiar gráfico si no hay datos
             return;
         }
@@ -70,44 +86,48 @@ document.addEventListener('DOMContentLoaded', () => {
             const fechaStr = `${f[2]}/${f[1]}/${f[0]}`;
             
             // Formatear Monto
-            const montoStr = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(t.monto);
+            const montoStr = formatearMoneda(t.monto, t.moneda);
             
             // Estilos según tipo
             const esGasto = t.tipo === 'gasto';
             const color = esGasto ? '#e74c3c' : '#2ecc71'; // Rojo o Verde
             const signo = esGasto ? '-' : '+';
             
-            // Cálculo del Balance (Ingresos suman, Gastos restan)
-            if (esGasto) {
-                balanceTotal -= t.monto;
+            // Cálculo del Balance por moneda
+            if (t.moneda === 'USD') {
+                balanceTotalUSD += esGasto ? -t.monto : t.monto;
             } else {
-                balanceTotal += t.monto;
+                balanceTotalARS += esGasto ? -t.monto : t.monto;
             }
 
             tr.innerHTML = `
                 <td>${fechaStr}</td>
                 <td>${t.descripcion}</td>
                 <td>${t.categoria_nombre || 'N/A'}</td>
-                <td style="text-transform: capitalize;">${t.tipo}</td>
+                <td style="text-transform: capitalize;">${t.tipo} (${t.moneda})</td>
                 <td style="color:${color}; font-weight:500;">${signo}${montoStr}</td>
             `;
             tablaBody.appendChild(tr);
         });
 
         // Mostrar Total
-        const colorTotal = balanceTotal < 0 ? 'red' : 'blue';
-        totalEl.style.color = colorTotal;
-        totalEl.textContent = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(balanceTotal);
+        const totalArsStr = formatearMoneda(balanceTotalARS, 'ARS');
+        const totalUsdStr = formatearMoneda(balanceTotalUSD, 'USD');
+        totalEl.innerHTML = `<span style="color:${balanceTotalARS < 0 ? 'red' : 'blue'}">${totalArsStr}</span> / <span style="color:${balanceTotalUSD < 0 ? 'red' : 'green'}">${totalUsdStr}</span>`;
     }
 
     // --- 4. RENDERIZAR GRÁFICO DE TORTA ---
-    function renderizarGrafico(datos) {
+    function renderizarGrafico() {
+        // Leemos la moneda seleccionada en los radio buttons
+        const monedaSeleccionada = document.querySelector('input[name="grafico-moneda"]:checked').value;
+
         // Solo graficamos GASTOS para ver la distribución del dinero que sale
         const agrupado = {};
         let hayGastos = false;
         
-        datos.forEach(t => {
-            if (t.tipo === 'gasto') {
+        transaccionesActuales.forEach(t => {
+            // Filtramos por tipo 'gasto' Y por la moneda seleccionada
+            if (t.tipo === 'gasto' && t.moneda === monedaSeleccionada) {
                 const cat = t.categoria_nombre || 'Otros';
                 if (!agrupado[cat]) agrupado[cat] = 0;
                 agrupado[cat] += t.monto;
@@ -120,7 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
             chartInstance.destroy();
         }
 
-        if (!hayGastos) return; // Si solo hay ingresos, no mostramos torta de gastos
+        if (!hayGastos) {
+            canvas.style.display = 'none'; // Ocultamos el canvas si no hay datos
+            return;
+        } else { canvas.style.display = 'block'; }
 
         const labels = Object.keys(agrupado);
         const valores = Object.values(agrupado);
@@ -148,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     title: {
                         display: true,
-                        text: 'Distribución de Gastos',
+                        text: `Distribución de Gastos (${monedaSeleccionada})`,
                         font: { size: 14 }
                     },
                     tooltip: {
@@ -157,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 let label = context.label || '';
                                 if (label) { label += ': '; }
                                 if (context.parsed !== null) {
-                                    label += new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(context.parsed);
+                                    label += formatearMoneda(context.parsed, monedaSeleccionada);
                                 }
                                 return label;
                             }

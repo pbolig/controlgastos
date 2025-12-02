@@ -62,11 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function formatearMoneda(numero, moneda = 'ARS') {
+    function formatearMoneda(numero, moneda = 'ARS') { // Ahora recibe la moneda
         const num = parseFloat(numero);
         if (isNaN(num)) return "$0.00";
-        let currencyCode = 'ARS';
-        if (moneda === 'USD') currencyCode = 'USD';
+        // Si es USD, usamos el código 'USD', si no, siempre 'ARS' para el formato local.
+        const currencyCode = moneda.toUpperCase() === 'USD' ? 'USD' : 'ARS';
         return new Intl.NumberFormat('es-AR', { style: 'currency', currency: currencyCode }).format(num);
     }
 
@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
                 const color = t.tipo === 'gasto' ? 'red' : 'green';
                 const f = t.fecha.split('-');
+                // Leemos la moneda de la transacción, default 'ARS' si no viene
                 const mon = t.moneda || 'ARS';
                 tr.innerHTML = `
                     <td>${f[2]}/${f[1]}/${f[0]}</td> <td>${t.descripcion}</td>
@@ -183,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // PAGAR / COBRAR
                         const txt = r.tipo === 'ingreso' ? 'Cobrar' : 'Pagar';
                         const cls = r.tipo === 'ingreso' ? 'btn-cobrar' : 'btn-pagar';
-                        btn = `<button class="${cls}" data-id="${r.id}" data-monto="${r.monto_estimado}" data-desc="${r.descripcion}" data-tipo="${r.tipo}" data-moneda="${mon}" style="margin-right:5px;">${txt}</button>`;
+                        btn = `<button class="${cls}" data-id="${r.id}" data-monto="${r.monto_estimado}" data-desc="${r.descripcion}" data-tipo="${r.tipo}" data-moneda="${mon}" style="margin-right:5px;">${txt} ${mon}</button>`;
                     }
                     // BOTÓN OMITIR
                     btn += `<button class="btn-omitir" data-id="${r.id}" data-desc="${r.descripcion}" title="Omitir este mes" style="background:#95a5a6; color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">⏸</button>`;
@@ -237,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { id, monto, desc, tipo, moneda } = target.dataset;
                 const accion = tipo === 'ingreso' ? 'cobro' : 'pago';
                 const real = prompt(`Confirmar ${accion} de "${desc}".\nMonto real (${moneda}):`, monto);
-                if(real) {
+                if(real !== null && real !== "") {
                     fetch('/api/recurrente/pagar', { method: 'POST', headers: {'Content-Type': 'application/json'}, 
                         body: JSON.stringify({ recurrente_id: id, monto_pagado: real, moneda_pago: moneda }) 
                     }).then(r => r.json()).then(d => {
@@ -323,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const mon = p.moneda || 'ARS';
                 let btn = '';
                 if (p.status_mes.includes('Pendiente')) {
-                    btn = `<button class="btn-pagar-cuota" data-id="${p.id}" data-monto="${p.monto_cuota}" data-moneda="${mon}" data-desc="${p.descripcion}" data-restantes="${p.total_cuotas - p.cuota_actual}">Pagar</button>`;
+                    btn = `<button class="btn-pagar-cuota" data-id="${p.id}" data-monto="${p.monto_cuota}" data-moneda="${mon}" data-desc="${p.descripcion}" data-restantes="${p.total_cuotas - p.cuota_actual}">Pagar ${mon}</button>`;
                 } else {
                     btn = '<span class="text-success">Listo</span>';
                 }
@@ -348,15 +349,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if(target.classList.contains('btn-pagar-cuota')) {
                 // FLEXIBILIDAD DE PAGO
                 const { id, monto, moneda, desc, restantes } = target.dataset;
-                const monedaPago = prompt(`Cuota: ${formatearMoneda(monto, moneda)}. (Restan: ${restantes})\n¿Moneda de pago? (ARS/USD)`, moneda);
-                if(!monedaPago) return;
-                
-                const montoFinal = prompt(`Monto final en ${monedaPago.toUpperCase()}:`, monto);
-                if(!montoFinal) return;
+                if(!confirm(`¿Confirmas el pago de la cuota de ${formatearMoneda(monto, moneda)} por "${desc}"?`)) return;
 
                 fetch('/api/cuota/pagar', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ plan_id: id, cantidad_cuotas: 1, moneda_pago: monedaPago.toUpperCase(), monto_pagado: montoFinal })
+                    body: JSON.stringify({ plan_id: id, cantidad_cuotas: 1 }) // El backend ya sabe la moneda y el monto
                 }).then(r => r.json()).then(d => {
                     if(d.error) throw new Error(d.error);
                     mostrarMensaje(d.mensaje); cargarCuotasStatus(); cargarTransacciones(); cargarDashboardSummary();
@@ -392,70 +389,108 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 7. MODALES (TARJETA Y HISTORIAL) ---
     const modalTarjeta = document.getElementById('modal-tarjeta');
+    const modalTarjetaTitulo = document.getElementById('modal-tarjeta-titulo');
     const formPagoTarjeta = document.getElementById('form-pago-tarjeta');
-    const divListaCuotas = document.getElementById('lista-cuotas-tarjeta');
-    const inputOtros = document.getElementById('tarjeta-otros-consumos');
-    const spanTotalTarjeta = document.getElementById('tarjeta-total-pagar');
     const loadingTarjeta = document.getElementById('modal-tarjeta-loading');
     const btnCerrarModalTarjeta = document.getElementById('btn-cerrar-modal-tarjeta');
 
     function abrirModalTarjeta(idRecurrente, nombreTarjeta) {
         modalTarjeta.style.display = 'flex';
         setTimeout(() => modalTarjeta.style.opacity = '1', 10);
+        modalTarjetaTitulo.textContent = `Pagar Resumen: ${nombreTarjeta}`;
         document.getElementById('tarjeta-recurrente-id').value = idRecurrente;
         formPagoTarjeta.style.display = 'none'; loadingTarjeta.style.display = 'block';
-        divListaCuotas.innerHTML = ''; inputOtros.value = 0; spanTotalTarjeta.textContent = "$0.00";
+
+        // Limpiar contenedores
+        ['ars', 'usd'].forEach(moneda => {
+            document.getElementById(`lista-cuotas-tarjeta-${moneda}`).innerHTML = '';
+            document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda.toUpperCase()}"]`).value = 0;
+        });
 
         fetch('/api/cuotas/status').then(r => r.json()).then(data => {
             loadingTarjeta.style.display = 'none'; formPagoTarjeta.style.display = 'block';
-            // FILTRAR POR ID TARJETA
-            const pendientes = data.filter(p => p.status_mes.includes('Pendiente') && p.recurrente_id == idRecurrente);
             
-            if (pendientes.length === 0) divListaCuotas.innerHTML = '<p style="padding:10px; color:#777;">No hay cuotas pendientes.</p>';
-            else {
-                pendientes.forEach(p => {
+            const pendientes = data.filter(p => p.status_mes.includes('Pendiente') && p.recurrente_id == idRecurrente);            
+            const cuotasPorMoneda = { ARS: [], USD: [] };
+            pendientes.forEach(p => {
+                const moneda = p.moneda || 'ARS';
+                cuotasPorMoneda[moneda].push(p);
+            });
+
+            ['ARS', 'USD'].forEach(moneda => {
+                const divListaCuotas = document.getElementById(`lista-cuotas-tarjeta-${moneda.toLowerCase()}`);
+                const columna = document.getElementById(`resumen-${moneda.toLowerCase()}`);
+                
+                if (cuotasPorMoneda[moneda].length === 0) {
+                    divListaCuotas.innerHTML = '<p class="no-cuotas">No hay cuotas pendientes.</p>';
+                } else {
+                    cuotasPorMoneda[moneda].forEach(p => {
                     const div = document.createElement('div');
-                    div.style.padding = "5px"; div.style.borderBottom = "1px solid #eee";
-                    div.innerHTML = `<label style="display:flex; align-items:center; cursor:pointer;">
-                        <input type="checkbox" class="check-cuota" value="${p.id}" data-monto="${p.monto_cuota}" checked style="width:auto; margin-right:10px;">
+                    div.className = 'cuota-item';
+                    div.innerHTML = `<label>
+                        <input type="checkbox" class="check-cuota" value="${p.id}" data-monto="${p.monto_cuota}" data-moneda="${moneda}" checked>
                         <div><strong>${p.descripcion}</strong> <br> <small>${p.cuota_actual}/${p.total_cuotas} - ${formatearMoneda(p.monto_cuota, p.moneda)}</small></div>
                     </label>`;
                     divListaCuotas.appendChild(div);
-                });
-            }
-            calcularTotalTarjeta();
+                    });
+                }
+                // Ocultar toda la columna si no hay cuotas Y el campo "otros" está en 0 (se recalcula al abrir)
+                calcularTotalTarjeta(moneda);
+            });
         });
     }
 
-    function calcularTotalTarjeta() {
+    function calcularTotalTarjeta(moneda) {
         let total = 0;
-        document.querySelectorAll('.check-cuota:checked').forEach(chk => total += parseFloat(chk.dataset.monto));
-        total += parseFloat(inputOtros.value) || 0;
-        spanTotalTarjeta.textContent = formatearMoneda(total); // Asume misma moneda para suma simple
+        document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]:checked`).forEach(chk => total += parseFloat(chk.dataset.monto));
+        
+        const otrosInput = document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda}"]`);
+        total += parseFloat(otrosInput.value) || 0;
+
+        document.querySelector(`.tarjeta-total-pagar[data-moneda="${moneda}"]`).textContent = formatearMoneda(total, moneda);
+        
+        // Lógica para ocultar/mostrar la columna
+        const columna = document.getElementById(`resumen-${moneda.toLowerCase()}`);
+        const hayCuotas = document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]`).length > 0;
+        if (!hayCuotas && total <= 0) {
+            columna.style.display = 'none';
+        } else {
+            columna.style.display = 'block';
+        }
         return total;
     }
 
     if (modalTarjeta) {
-        divListaCuotas.addEventListener('change', calcularTotalTarjeta);
-        inputOtros.addEventListener('input', calcularTotalTarjeta);
+        // Usamos el formulario como contenedor para delegar eventos
+        formPagoTarjeta.addEventListener('input', (e) => {
+            if (e.target.classList.contains('check-cuota') || e.target.classList.contains('tarjeta-otros-consumos')) {
+                calcularTotalTarjeta(e.target.dataset.moneda);
+            }
+        });
+
         if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200); });
 
-        formPagoTarjeta.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
-            const planesIds = Array.from(document.querySelectorAll('.check-cuota:checked')).map(c => c.value);
-            const total = calcularTotalTarjeta();
-            
-            if(total <= 0) return alert("Monto debe ser mayor a 0");
-            if(!confirm(`¿Pagar resumen por ${formatearMoneda(total)}?`)) return;
+        formPagoTarjeta.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-pagar-resumen')) {
+                e.preventDefault();
+                const moneda = e.target.dataset.moneda;
+                const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
+                const planesIds = Array.from(document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]:checked`)).map(c => c.value);
+                const montoOtros = document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda}"]`).value;
+                const total = calcularTotalTarjeta(moneda);
+                
+                if(total <= 0) return alert(`El monto a pagar en ${moneda} debe ser mayor a 0.`);
+                if(!confirm(`¿Confirmas el pago del resumen en ${moneda} por un total de ${formatearMoneda(total, moneda)}?`)) return;
 
-            fetch('/api/tarjeta/pagar-resumen', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ recurrente_id: recurrenteId, planes_ids: planesIds, monto_otros: document.getElementById('tarjeta-otros-consumos').value, monto_total: total })
-            }).then(r => r.json()).then(d => {
-                if(d.error) throw new Error(d.error); mostrarMensaje(d.mensaje);
-                modalTarjeta.style.display = 'none'; cargarRecurrentesStatus(); cargarTransacciones(); cargarDashboardSummary(); cargarCuotasStatus();
-            }).catch(e => alert(e.message));
+                fetch('/api/tarjeta/pagar-resumen', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ recurrente_id: recurrenteId, planes_ids: planesIds, monto_otros: montoOtros, monto_total: total, moneda: moneda })
+                }).then(r => r.json()).then(d => {
+                    if(d.error) throw new Error(d.error); mostrarMensaje(d.mensaje);
+                    modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200);
+                    cargarRecurrentesStatus(); cargarTransacciones(); cargarDashboardSummary(); cargarCuotasStatus();
+                }).catch(e => alert(e.message));
+            }
         });
     }
 
@@ -479,24 +514,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 8. DASHBOARD ---
     function cargarDashboardSummary() {
         fetch('/api/dashboard/summary').then(r => r.json()).then(d => {
-            function update(card, sel, val, mon) {
+            // La nueva función 'update' ahora busca dos selectores, uno para ARS y otro para USD
+            function update(card, sel_ars, val_ars, sel_usd, val_usd) {
                 if(card) {
-                    const el = card.querySelector(sel);
-                    if(el) {
-                        el.textContent = formatearMoneda(val, mon);
-                        if(sel.includes('saldo')) el.style.color = val < 0 ? 'red' : (mon==='USD'?'green':'blue');
+                    const el_ars = card.querySelector(sel_ars);
+                    const el_usd = card.querySelector(sel_usd);
+                    if(el_ars) {
+                        el_ars.textContent = formatearMoneda(val_ars, 'ARS');
+                        if(sel_ars.includes('saldo')) el_ars.style.color = val_ars < 0 ? '#e74c3c' : '#2980b9';
+                    }
+                    if(el_usd) {
+                        el_usd.textContent = formatearMoneda(val_usd, 'USD');
+                        if(sel_usd.includes('saldo')) el_usd.style.color = val_usd < 0 ? '#e74c3c' : '#27ae60';
                     }
                 }
             }
-            update(cardIngresos, '.val-ars', d.ARS.ingresos, 'ARS');
-            update(cardGastos, '.val-ars', d.ARS.gastos, 'ARS');
-            update(cardPendiente, '.val-ars', d.ARS.pendiente, 'ARS');
-            update(cardSaldo, '.val-ars', d.ARS.saldo, 'ARS');
-
-            update(cardIngresos, '.val-usd', d.USD.ingresos, 'USD');
-            update(cardGastos, '.val-usd', d.USD.gastos, 'USD');
-            update(cardPendiente, '.val-usd', d.USD.pendiente, 'USD');
-            update(cardSaldo, '.val-usd', d.USD.saldo, 'USD');
+            // Asumiendo que 'd' ahora es { ARS: {...}, USD: {...} }
+            update(cardIngresos, '.val-ars', d.ARS.ingresos, '.val-usd', d.USD.ingresos);
+            update(cardGastos, '.val-ars', d.ARS.gastos, '.val-usd', d.USD.gastos);
+            update(cardPendiente, '.val-ars', d.ARS.pendiente, '.val-usd', d.USD.pendiente);
+            update(cardSaldo, '.val-ars', d.ARS.saldo, '.val-usd', d.USD.saldo);
         });
     }
 

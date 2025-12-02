@@ -102,6 +102,8 @@ def agregar_transaccion():
         monto = data.get('monto')
         tipo = data.get('tipo')
         categoria_id = data.get('categoria_id')
+        # Leemos la moneda, con 'ARS' como valor por defecto
+        moneda = data.get('moneda', 'ARS')
 
         if not descripcion or not monto or not tipo:
             return jsonify({ "error": "Descripción, monto y tipo son obligatorios." }), 400
@@ -113,8 +115,8 @@ def agregar_transaccion():
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, ?, ?, ?)",
-            (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int)
+            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, ?, ?, ?, ?)",
+            (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int, moneda)
         )
         db.commit()
         return jsonify({ "mensaje": "Transacción agregada exitosamente", "id": cursor.lastrowid }), 201
@@ -129,7 +131,7 @@ def get_transacciones():
         cursor = db.cursor()
         # Formateamos fecha a YYYY-MM-DD para el frontend
         cursor.execute("""
-            SELECT t.id, t.descripcion, t.monto, t.tipo, strftime('%Y-%m-%d', t.fecha) AS fecha, c.nombre AS categoria_nombre 
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) AS fecha, c.nombre AS categoria_nombre 
             FROM transacciones AS t 
             LEFT JOIN categorias AS c ON t.categoria_id = c.id
             ORDER BY t.fecha DESC, t.id DESC
@@ -147,6 +149,7 @@ def agregar_recurrente():
         data = request.get_json()
         # Por defecto es 'gasto' si no se especifica
         tipo = data.get('tipo', 'gasto') 
+        moneda = data.get('moneda', 'ARS')
         
         if not all([data.get('descripcion'), data.get('monto_estimado'), data.get('dia_vencimiento'), data.get('categoria_id')]):
             return jsonify({ "error": "Faltan campos obligatorios." }), 400
@@ -154,8 +157,8 @@ def agregar_recurrente():
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo) VALUES (?, ?, ?, ?, ?, ?)",
-            (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'), tipo)
+            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo, moneda) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'), tipo, moneda)
         )
         db.commit()
         return jsonify({ "mensaje": "Movimiento recurrente guardado", "id": cursor.lastrowid }), 201
@@ -186,11 +189,12 @@ def editar_recurrente(id):
     try:
         d = request.get_json()
         tipo = d.get('tipo', 'gasto')
+        moneda = d.get('moneda', 'ARS')
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=?, tipo=? WHERE id=?",
-            (d['descripcion'], float(d['monto_estimado']), int(d['dia_vencimiento']), int(d['categoria_id']), d.get('observacion'), tipo, id)
+            "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=?, tipo=?, moneda=? WHERE id=?",
+            (d['descripcion'], float(d['monto_estimado']), int(d['dia_vencimiento']), int(d['categoria_id']), d.get('observacion'), tipo, moneda, id)
         )
         db.commit()
         return jsonify({ "mensaje": "Actualizado correctamente" }), 200
@@ -205,7 +209,7 @@ def get_recurrentes_status():
         db = get_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo,
+            SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo, r.moneda,
             c.nombre AS categoria_nombre, c.id AS categoria_id,
             CASE 
                 WHEN l.id IS NOT NULL AND l.transaccion_id IS NULL THEN 'Omitido' -- Nueva lógica
@@ -286,8 +290,8 @@ def pagar_recurrente():
             desc = f"{accion_txt} recurrente: {recurrente['descripcion']}"
             
             # Insertamos usando el 'tipo_movimiento' correcto (esto arregla la resta/suma)
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, ?, ?, ?)",
-                           (desc, float(data['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id']))
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, ?, ?, ?, ?)",
+                           (desc, float(data['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id'], recurrente['moneda']))
             
             new_id = cursor.lastrowid
             cursor.execute("INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
@@ -303,17 +307,36 @@ def get_dashboard_summary():
         hoy = datetime.date.today()
         mes_formato = f"{hoy.year:04d}-{hoy.month:02d}"
         db = get_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT COALESCE(SUM(monto), 0) as total FROM transacciones WHERE tipo='ingreso' AND strftime('%Y-%m', fecha)=?", (mes_formato,))
-        ingresos = cursor.fetchone()['total']
-        cursor.execute("SELECT COALESCE(SUM(monto), 0) as total FROM transacciones WHERE tipo='gasto' AND strftime('%Y-%m', fecha)=?", (mes_formato,))
-        gastos = cursor.fetchone()['total']
-        cursor.execute("""
-            SELECT COALESCE(SUM(r.monto_estimado), 0) as total FROM gastos_recurrentes AS r 
-            WHERE r.id NOT IN (SELECT recurrente_id FROM pagos_recurrentes_log WHERE mes=? AND anio=?)
-        """, (hoy.month, hoy.year))
-        pendientes = cursor.fetchone()['total']
-        return jsonify({ "total_ingresos": ingresos, "total_gastos": gastos, "total_pendiente": pendientes, "saldo_actual": ingresos - gastos }), 200
+        
+        # Preparamos la estructura de respuesta
+        summary = {
+            'ARS': {'ingresos': 0, 'gastos': 0, 'pendiente': 0, 'saldo': 0},
+            'USD': {'ingresos': 0, 'gastos': 0, 'pendiente': 0, 'saldo': 0}
+        }
+
+        # Calculamos para cada moneda
+        for moneda in ['ARS', 'USD']:
+            cursor = db.cursor()
+            
+            # Ingresos y Gastos del mes
+            cursor.execute("SELECT tipo, COALESCE(SUM(monto), 0) as total FROM transacciones WHERE strftime('%Y-%m', fecha)=? AND moneda=? GROUP BY tipo", (mes_formato, moneda))
+            for row in cursor.fetchall():
+                if row['tipo'] == 'ingreso':
+                    summary[moneda]['ingresos'] = row['total']
+                elif row['tipo'] == 'gasto':
+                    summary[moneda]['gastos'] = row['total']
+            
+            # Pendientes del mes
+            cursor.execute("""
+                SELECT COALESCE(SUM(r.monto_estimado), 0) as total FROM gastos_recurrentes AS r 
+                WHERE r.moneda=? AND r.id NOT IN (SELECT recurrente_id FROM pagos_recurrentes_log WHERE mes=? AND anio=?)
+            """, (moneda, hoy.month, hoy.year))
+            summary[moneda]['pendiente'] = cursor.fetchone()['total']
+            
+            # Saldo
+            summary[moneda]['saldo'] = summary[moneda]['ingresos'] - summary[moneda]['gastos']
+
+        return jsonify(summary), 200
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
 
 # --- === API DE CUOTAS === ---
@@ -325,12 +348,13 @@ def agregar_plan_cuota():
         f = datetime.date.fromisoformat(d['fecha_inicio'])
         # Capturamos el ID de la tarjeta (puede venir vacío)
         rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
+        moneda = d.get('moneda', 'ARS')
         
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual) VALUES (?,?,?,?,?,?,?,0)",
-            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), f, int(d['categoria_id']), rec_id)
+            "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual, moneda) VALUES (?,?,?,?,?,?,?,0,?)",
+            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), f, int(d['categoria_id']), rec_id, moneda)
         )
         db.commit()
         return jsonify({ "mensaje": "Plan guardado" }), 201
@@ -374,8 +398,8 @@ def pagar_cuota():
             desc = f"Pago Cuota(s) ({plan['cuota_actual']+1} a {plan['cuota_actual']+cant}/{plan['total_cuotas']}): {plan['descripcion']}"
             if cant == 1: desc = f"Pago Cuota ({plan['cuota_actual']+1}/{plan['total_cuotas']}): {plan['descripcion']}"
             
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, 'gasto', ?, ?)",
-                           (desc, monto_total, hoy, plan['categoria_id']))
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, 'gasto', ?, ?, ?)",
+                           (desc, monto_total, hoy, plan['categoria_id'], plan['moneda']))
             new_id = cursor.lastrowid
             cursor.execute("UPDATE planes_cuotas SET cuota_actual=?, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
                            (plan['cuota_actual']+cant, hoy.month, hoy.year, plan['id']))
@@ -400,11 +424,12 @@ def editar_plan_cuota(id):
         d = request.get_json()
         f = datetime.date.fromisoformat(d['fecha_inicio'])
         rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
+        moneda = d.get('moneda', 'ARS')
 
         db = get_db()
         db.execute(
-            "UPDATE planes_cuotas SET descripcion=?, monto_total=?, monto_cuota=?, total_cuotas=?, categoria_id=?, fecha_inicio=?, recurrente_id=? WHERE id=?",
-            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), int(d['categoria_id']), f, rec_id, id)
+            "UPDATE planes_cuotas SET descripcion=?, monto_total=?, monto_cuota=?, total_cuotas=?, categoria_id=?, fecha_inicio=?, recurrente_id=?, moneda=? WHERE id=?",
+            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), int(d['categoria_id']), f, rec_id, moneda, id)
         )
         db.commit()
         return jsonify({ "mensaje": "Actualizado" }), 200
@@ -422,7 +447,7 @@ def filtrar_reportes():
         data = request.get_json()
         # ¡AQUÍ ESTABA EL ERROR! Ahora usamos strftime para que el JS reciba la fecha limpia
         query = """
-            SELECT t.id, t.descripcion, t.monto, t.tipo, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre
             FROM transacciones t
             LEFT JOIN categorias c ON t.categoria_id = c.id
             WHERE 1=1
@@ -444,6 +469,10 @@ def filtrar_reportes():
         if data.get('categoria_id'):
             query += " AND t.categoria_id = ?"
             params.append(int(data['categoria_id']))
+            
+        if data.get('moneda') and data['moneda'] != 'todas':
+            query += " AND t.moneda = ?"
+            params.append(data['moneda'])
 
         query += " ORDER BY t.fecha DESC"
 
@@ -466,6 +495,7 @@ def pagar_resumen_tarjeta():
         ids_cuotas = data.get('planes_ids', []) # Lista de IDs de planes a avanzar
         monto_otros = float(data.get('monto_otros', 0))
         monto_total = float(data.get('monto_total', 0))
+        moneda_pago = data.get('moneda') # Moneda del resumen que se está pagando (ARS o USD)
 
         hoy = datetime.date.today()
         db = get_db()
@@ -476,6 +506,8 @@ def pagar_resumen_tarjeta():
             cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (recurrente_id,))
             tarjeta = cursor.fetchone()
             if not tarjeta: return jsonify({"error": "Tarjeta no encontrada"}), 404
+            
+            if not moneda_pago: return jsonify({"error": "La moneda de pago es obligatoria."}), 400
 
             # 2. Procesar los planes de cuotas seleccionados
             nombres_planes = []
@@ -484,6 +516,8 @@ def pagar_resumen_tarjeta():
                 cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (plan_id,))
                 plan = cursor.fetchone()
                 if plan:
+                    # Solo agregamos el nombre si la cuota coincide con la moneda que estamos pagando
+                    if plan['moneda'] != moneda_pago: continue
                     nombres_planes.append(plan['descripcion'])
                     cursor.execute(
                         "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
@@ -492,16 +526,16 @@ def pagar_resumen_tarjeta():
 
             # 3. Crear la descripción de la transacción
             detalles = ", ".join(nombres_planes)
-            desc = f"Resumen {tarjeta['descripcion']}"
+            desc = f"Resumen {tarjeta['descripcion']} ({moneda_pago})"
             if detalles:
                 desc += f" (Cuotas: {detalles})"
             if monto_otros > 0:
-                desc += " + Consumos varios"
+                desc += f" + Consumos varios ({moneda_pago})"
 
             # 4. Insertar la transacción ÚNICA por el total
             cursor.execute(
-                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id) VALUES (?, ?, 'gasto', ?, ?)",
-                (desc, monto_total, hoy, tarjeta['categoria_id'])
+                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, 'gasto', ?, ?, ?)",
+                (desc, monto_total, hoy, tarjeta['categoria_id'], moneda_pago)
             )
             transaccion_id = cursor.lastrowid
 
