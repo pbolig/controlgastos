@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SELECTORES ---
     const formFiltros = document.getElementById('form-filtros');
     const selCategoria = document.getElementById('f-categoria');
+    const selMonedaFiltro = document.getElementById('f-moneda'); // Selector de moneda del filtro
     const tablaBody = document.getElementById('body-resultados');
     const totalEl = document.getElementById('total-filtrado');
     const canvas = document.getElementById('miGrafico');
@@ -57,6 +58,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (divControlesGrafico) {
         divControlesGrafico.addEventListener('change', () => {
             renderizarGrafico(); // Volver a dibujar el gráfico con la nueva moneda
+        });
+    }
+
+    // --- NUEVO: Sincronizar filtro de moneda con el gráfico ---
+    if (selMonedaFiltro) {
+        selMonedaFiltro.addEventListener('change', (e) => {
+            const monedaSeleccionada = e.target.value;
+
+            // Si se elige una moneda específica en el filtro, la reflejamos en el gráfico
+            if (monedaSeleccionada === 'ARS' || monedaSeleccionada === 'USD') {
+                const radioGrafico = document.querySelector(`input[name="grafico-moneda"][value="${monedaSeleccionada}"]`);
+                if (radioGrafico) {
+                    radioGrafico.checked = true;
+                    renderizarGrafico(); // Actualizamos el gráfico al instante
+                }
+            }
         });
     }
 

@@ -47,6 +47,14 @@
                         <!-- JS cargará las categorías aquí -->
                     </select>
                 </div>
+                <div>
+                    <label>Moneda:</label>
+                    <select name="moneda" id="f-moneda">
+                        <option value="todas">Todas</option>
+                        <option value="ARS">ARS</option>
+                        <option value="USD">USD</option>
+                    </select>
+                </div>
                 <button type="submit" class="btn-primary">🔍 Filtrar</button>
             </form>
         </section>
@@ -55,7 +63,7 @@
             <!-- 2. GRÁFICO DE TORTA (Ahora en una columna más ancha) -->
             <section class="widget" style="grid-column: 1 / -1;">
                 <h2>Gráfico de Gastos</h2>
-                <div class="grafico-container">
+                <div class="grafico-container" style="max-width: 70%; margin: 0 auto;">
                     <!-- Selector de Moneda para el Gráfico -->
                     <div class="grafico-controles">
                         <label><input type="radio" name="grafico-moneda" value="ARS" checked> ARS</label>
