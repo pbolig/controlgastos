@@ -2,8 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM Cargado. Ejecutando app.js v12 (Multimoneda + Historial + Omitir)...");
 
     // --- 1. SELECTORES ---
-    const apiStatusDiv = document.getElementById('api-status');
-    
     // Dashboard (Ahora buscamos los contenedores por ID para llenarlos por clase)
     const cardIngresos = document.getElementById('summary-ingresos');
     const cardGastos = document.getElementById('summary-gastos');
@@ -431,103 +429,73 @@ document.addEventListener('DOMContentLoaded', () => {
     const formPagoTarjeta = document.getElementById('form-pago-tarjeta');
     const loadingTarjeta = document.getElementById('modal-tarjeta-loading');
     const btnCerrarModalTarjeta = document.getElementById('btn-cerrar-modal-tarjeta');
+    const btnConfirmarPagoResumen = document.getElementById('btn-confirmar-pago-resumen');
 
-    function abrirModalTarjeta(idRecurrente, nombreTarjeta) {
+    async function abrirModalTarjeta(idRecurrente, nombreTarjeta) {
         modalTarjeta.style.display = 'flex';
         setTimeout(() => modalTarjeta.style.opacity = '1', 10);
         modalTarjetaTitulo.textContent = `Pagar Resumen: ${nombreTarjeta}`;
         document.getElementById('tarjeta-recurrente-id').value = idRecurrente;
         formPagoTarjeta.style.display = 'none'; loadingTarjeta.style.display = 'block';
 
-        // Limpiar contenedores
-        ['ars', 'usd'].forEach(moneda => {
-            document.getElementById(`lista-cuotas-tarjeta-${moneda}`).innerHTML = '';
-            document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda.toUpperCase()}"]`).value = 0;
-        });
+        const divListaCuotas = document.getElementById('lista-cuotas-tarjeta');
+        const spanTotalCuotas = document.getElementById('total-cuotas-modal');
+        const inputMontoPagado = document.getElementById('monto-pagado-resumen');
+        divListaCuotas.innerHTML = '';
+        spanTotalCuotas.textContent = formatearMoneda(0);
+        inputMontoPagado.value = '';
 
-        fetch('/api/cuotas/status').then(r => r.json()).then(data => {
+        try {
+            const data = await apiCall('/api/cuotas/status');
             loadingTarjeta.style.display = 'none'; formPagoTarjeta.style.display = 'block';
             
-            const pendientes = data.filter(p => p.status_mes.includes('Pendiente') && p.recurrente_id == idRecurrente);            
-            const cuotasPorMoneda = { ARS: [], USD: [] };
-            pendientes.forEach(p => {
-                const moneda = p.moneda || 'ARS';
-                cuotasPorMoneda[moneda].push(p);
-            });
+            const pendientes = data.filter(p => p.status_mes.includes('Pendiente') && p.recurrente_id == idRecurrente);
+            let totalCuotas = 0;
 
-            ['ARS', 'USD'].forEach(moneda => {
-                const divListaCuotas = document.getElementById(`lista-cuotas-tarjeta-${moneda.toLowerCase()}`);
-                const columna = document.getElementById(`resumen-${moneda.toLowerCase()}`);
-                
-                if (cuotasPorMoneda[moneda].length === 0) {
-                    divListaCuotas.innerHTML = '<p class="no-cuotas">No hay cuotas pendientes.</p>';
-                } else {
-                    cuotasPorMoneda[moneda].forEach(p => {
+            if (pendientes.length === 0) {
+                divListaCuotas.innerHTML = '<p class="no-cuotas">No hay cuotas pendientes para este resumen.</p>';
+            } else {
+                pendientes.forEach(p => {
+                    totalCuotas += p.monto_cuota;
                     const div = document.createElement('div');
-                    div.className = 'cuota-item';
-                    div.innerHTML = `<label>
-                        <input type="checkbox" class="check-cuota" value="${p.id}" data-monto="${p.monto_cuota}" data-moneda="${moneda}" checked>
-                        <div><strong>${p.descripcion}</strong> <br> <small>${p.cuota_actual}/${p.total_cuotas} - ${formatearMoneda(p.monto_cuota, p.moneda)}</small></div>
-                    </label>`;
+                    div.className = 'cuota-item-info'; // Nueva clase para solo mostrar info
+                    div.innerHTML = `<strong>${p.descripcion}</strong> (${p.cuota_actual + 1}/${p.total_cuotas}) <span class="monto">${formatearMoneda(p.monto_cuota, p.moneda)}</span>`;
                     divListaCuotas.appendChild(div);
-                    });
-                }
-                // Ocultar toda la columna si no hay cuotas Y el campo "otros" está en 0 (se recalcula al abrir)
-                calcularTotalTarjeta(moneda);
-            });
-        });
-    }
+                });
+            }
+            
+            spanTotalCuotas.textContent = formatearMoneda(totalCuotas, pendientes[0]?.moneda || 'ARS');
+            inputMontoPagado.value = totalCuotas.toFixed(2); // Sugerimos el monto total de cuotas
 
-    function calcularTotalTarjeta(moneda) {
-        let total = 0;
-        document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]:checked`).forEach(chk => total += parseFloat(chk.dataset.monto));
-        
-        const otrosInput = document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda}"]`);
-        total += parseFloat(otrosInput.value) || 0;
-
-        document.querySelector(`.tarjeta-total-pagar[data-moneda="${moneda}"]`).textContent = formatearMoneda(total, moneda);
-        
-        // Lógica para ocultar/mostrar la columna
-        const columna = document.getElementById(`resumen-${moneda.toLowerCase()}`);
-        const hayCuotas = document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]`).length > 0;
-        if (!hayCuotas && total <= 0) {
-            columna.style.display = 'none';
-        } else {
-            columna.style.display = 'block';
+        } catch (error) {
+            console.error("Error al abrir modal de tarjeta:", error);
+            loadingTarjeta.style.display = 'none';
+            divListaCuotas.innerHTML = '<p style="color:red">Error al cargar las cuotas.</p>';
         }
-        return total;
     }
 
     if (modalTarjeta) {
-        // Usamos el formulario como contenedor para delegar eventos
-        formPagoTarjeta.addEventListener('input', (e) => {
-            if (e.target.classList.contains('check-cuota') || e.target.classList.contains('tarjeta-otros-consumos')) {
-                calcularTotalTarjeta(e.target.dataset.moneda);
-            }
-        });
-
         if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200); });
 
-        formPagoTarjeta.addEventListener('click', (e) => {
-            if (e.target.classList.contains('btn-pagar-resumen')) {
-                e.preventDefault();
-                const moneda = e.target.dataset.moneda;
-                const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
-                const planesIds = Array.from(document.querySelectorAll(`.check-cuota[data-moneda="${moneda}"]:checked`)).map(c => c.value);
-                const montoOtros = document.querySelector(`.tarjeta-otros-consumos[data-moneda="${moneda}"]`).value;
-                const total = calcularTotalTarjeta(moneda);
-                
-                if(total <= 0) return alert(`El monto a pagar en ${moneda} debe ser mayor a 0.`);
-                if(!confirm(`¿Confirmas el pago del resumen en ${moneda} por un total de ${formatearMoneda(total, moneda)}?`)) return;
+        btnConfirmarPagoResumen.addEventListener('click', async () => {
+            const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
+            const montoPagado = parseFloat(document.getElementById('monto-pagado-resumen').value);
 
-                fetch('/api/tarjeta/pagar-resumen', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ recurrente_id: recurrenteId, planes_ids: planesIds, monto_otros: montoOtros, monto_total: total, moneda: moneda })
-                }).then(r => r.json()).then(d => {
-                    if(d.error) throw new Error(d.error); mostrarMensaje(d.mensaje);
+            if (!montoPagado || montoPagado <= 0) {
+                return alert("El monto pagado debe ser mayor a cero.");
+            }
+            if (confirm(`¿Confirmas el pago del resumen por un total de ${formatearMoneda(montoPagado)}?`)) {
+
+                try {
+                    const data = { recurrente_id: recurrenteId, monto_pagado: montoPagado };
+                    const d = await apiCall('/api/tarjeta/pagar-resumen', 'POST', data);
+                    mostrarMensaje(d.mensaje);
                     modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200);
                     refrescarPaneles();
-                }).catch(e => alert(e.message));
+                } catch (error) {
+                    // El error ya es mostrado por apiCall, aquí no necesitamos hacer nada más.
+                    console.error("Fallo al pagar resumen:", error);
+                }
             }
         });
     }
@@ -563,7 +531,38 @@ document.addEventListener('DOMContentLoaded', () => {
         await cargarCategorias(); // Esperamos a que las categorías se carguen primero
         refrescarPaneles();
 
-        // Añadimos los listeners para los formularios
+        // FIX: Añadimos los listeners para los formularios que se perdieron en la refactorización.
+        if (formTransaccion) {
+            formTransaccion.addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleFormSubmit(formTransaccion, () => {
+                    formTransaccion.reset();
+                    refrescarPaneles();
+                });
+            });
+        }
+        if (formRecurrente) {
+            formRecurrente.addEventListener('submit', (e) => { e.preventDefault(); handleFormSubmit(formRecurrente, () => { resetFormRecurrente(); refrescarPaneles(); }); });
+        }
+        if (formCuota) {
+            formCuota.addEventListener('submit', (e) => { e.preventDefault(); handleFormSubmit(formCuota, () => { resetFormCuota(); refrescarPaneles(); }); });
+        }
+
+        // --- Funcionalidad extra: Auto-cálculo de cuotas ---
+        const inputCuotaTotal = document.getElementById('cuota-total');
+        const inputCuotaTotalCuotas = document.getElementById('cuota-total-cuotas');
+        const inputCuotaMonto = document.getElementById('cuota-monto');
+
+        function autoCalcularCuota() {
+            const total = parseFloat(inputCuotaTotal.value);
+            const numCuotas = parseInt(inputCuotaTotalCuotas.value, 10);
+            if (total > 0 && numCuotas > 0) {
+                inputCuotaMonto.value = (total / numCuotas).toFixed(2);
+            }
+        }
+
+        inputCuotaTotal.addEventListener('input', autoCalcularCuota);
+        inputCuotaTotalCuotas.addEventListener('input', autoCalcularCuota);
     }
 
     inicializarApp();

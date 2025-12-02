@@ -490,13 +490,11 @@ def filtrar_reportes():
 @login_required
 def pagar_resumen_tarjeta():
     try:
+        # Lógica simplificada: El usuario solo informa el monto total pagado.
         data = request.get_json()
         recurrente_id = data.get('recurrente_id')
-        ids_cuotas = data.get('planes_ids', []) # Lista de IDs de planes a avanzar
-        monto_otros = float(data.get('monto_otros', 0))
-        monto_total = float(data.get('monto_total', 0))
-        moneda_pago = data.get('moneda') # Moneda del resumen que se está pagando (ARS o USD)
-
+        monto_pagado = float(data.get('monto_pagado', 0))
+        
         hoy = datetime.date.today()
         db = get_db()
         cursor = db.cursor()
@@ -507,35 +505,42 @@ def pagar_resumen_tarjeta():
             tarjeta = cursor.fetchone()
             if not tarjeta: return jsonify({"error": "Tarjeta no encontrada"}), 404
             
-            if not moneda_pago: return jsonify({"error": "La moneda de pago es obligatoria."}), 400
+            # La moneda del pago es la moneda de la tarjeta recurrente.
+            moneda_pago = tarjeta['moneda']
 
-            # 2. Procesar los planes de cuotas seleccionados
+            # 2. Identificar y procesar las cuotas pendientes asociadas a esta tarjeta.
             nombres_planes = []
-            for plan_id in ids_cuotas:
-                # Avanzamos 1 cuota a cada plan
-                cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (plan_id,))
-                plan = cursor.fetchone()
-                if plan:
-                    # Solo agregamos el nombre si la cuota coincide con la moneda que estamos pagando
-                    if plan['moneda'] != moneda_pago: continue
-                    nombres_planes.append(plan['descripcion'])
-                    cursor.execute(
-                        "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
-                        (hoy.month, hoy.year, plan_id)
-                    )
+            monto_total_cuotas = 0
+
+            # Buscamos cuotas pendientes de este mes para esta tarjeta y moneda
+            cursor.execute("""
+                SELECT * FROM planes_cuotas 
+                WHERE recurrente_id = ? AND moneda = ? AND cuota_actual < total_cuotas
+                AND (ultimo_pago_anio IS NULL OR ultimo_pago_anio < ? OR (ultimo_pago_anio = ? AND ultimo_pago_mes < ?))
+            """, (recurrente_id, moneda_pago, hoy.year, hoy.year, hoy.month))
+            
+            cuotas_pendientes = cursor.fetchall()
+
+            for plan in cuotas_pendientes:
+                nombres_planes.append(plan['descripcion'])
+                monto_total_cuotas += plan['monto_cuota']
+                cursor.execute(
+                    "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
+                    (hoy.month, hoy.year, plan['id'])
+                )
 
             # 3. Crear la descripción de la transacción
             detalles = ", ".join(nombres_planes)
+            monto_otros = monto_pagado - monto_total_cuotas
             desc = f"Resumen {tarjeta['descripcion']} ({moneda_pago})"
-            if detalles:
-                desc += f" (Cuotas: {detalles})"
+            if detalles: desc += f" (Cuotas: {detalles})"
             if monto_otros > 0:
-                desc += f" + Consumos varios ({moneda_pago})"
+                desc += f" + Otros consumos"
 
             # 4. Insertar la transacción ÚNICA por el total
             cursor.execute(
                 "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, 'gasto', ?, ?, ?)",
-                (desc, monto_total, hoy, tarjeta['categoria_id'], moneda_pago)
+                (desc, monto_pagado, hoy, tarjeta['categoria_id'], moneda_pago)
             )
             transaccion_id = cursor.lastrowid
 

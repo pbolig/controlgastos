@@ -16,9 +16,6 @@
     <div class="container">
         <header>
             <h1>Mi Panel de Gastos</h1>            
-            <div id="api-status">
-                <p>Cargando estado...</p>                
-            </div>
             <a href="/reportes" class="btn-secondary" style="text-decoration: none; padding: 8px 15px; font-size: 0.9em; background-color: #8e44ad;">📊 Reportes</a>
             <a href="/logout" class="btn-secondary" style="text-decoration: none; padding: 8px 15px; font-size: 0.9em; background-color: #378881;">🔒 Salir</a>
         </header>
@@ -45,7 +42,7 @@
         <div class="form-container">
             <section class="widget form-card" id="nuevo-movimiento">
                 <h2>Registrar Movimiento</h2>
-                <form id="form-transaccion">
+                <form id="form-transaccion" data-endpoint="/api/transaccion">
                     <div>
                         <label for="descripcion">Descripción:</label>
                         <input type="text" id="descripcion" name="descripcion" required>
@@ -81,7 +78,7 @@
 
             <section class="widget form-card" id="nuevo-recurrente">
                 <h2 id="form-recurrente-titulo">Definir Gasto Recurrente</h2>
-                <form id="form-recurrente">
+                <form id="form-recurrente" data-endpoint="/api/recurrente">
                     <div>
                         <label for="recurrente-descripcion">Descripción:</label>
                         <input type="text" id="recurrente-descripcion" name="descripcion" required>
@@ -130,7 +127,7 @@
             </section>
             <section class="widget form-card" id="nuevo-plan-cuota">
                 <h2 id="form-cuota-titulo">Definir Plan de Cuotas</h2>
-                <form id="form-cuota">
+                <form id="form-cuota" data-endpoint="/api/cuota">
                     <div>
                         <label for="cuota-descripcion">Descripción:</label>
                         <input type="text" id="cuota-descripcion" name="descripcion" required>
@@ -246,40 +243,24 @@
             
             <div id="modal-tarjeta-loading" style="text-align: center; padding: 20px;">Cargando cuotas...</div>
             
-            <form id="form-pago-tarjeta" style="display: none;">
+            <form id="form-pago-tarjeta" style="display: none;" onsubmit="return false;">
                 <input type="hidden" id="tarjeta-recurrente-id">
                 
-                <!-- Contenedor de dos columnas -->
-                <div class="resumen-container">
-                    <!-- Columna ARS -->
-                    <div class="resumen-columna" id="resumen-ars">
-                        <h4>Resumen en ARS</h4>
-                        <div class="lista-cuotas-container" id="lista-cuotas-tarjeta-ars"></div>
-                        <div class="otros-consumos">
-                            <label>Otros Consumos (ARS):</label>
-                            <input type="number" class="tarjeta-otros-consumos" data-moneda="ARS" step="0.01" value="0">
-                        </div>
-                        <div class="total-pagar">
-                            Total ARS: <span class="tarjeta-total-pagar" data-moneda="ARS">$0.00</span>
-                        </div>
-                        <button type="button" class="btn-primary btn-pagar-resumen" data-moneda="ARS">Pagar Resumen ARS</button>
-                    </div>
-
-                    <!-- Columna USD -->
-                    <div class="resumen-columna" id="resumen-usd">
-                        <h4>Resumen en USD</h4>
-                        <div class="lista-cuotas-container" id="lista-cuotas-tarjeta-usd"></div>
-                        <div class="otros-consumos">
-                            <label>Otros Consumos (USD):</label>
-                            <input type="number" class="tarjeta-otros-consumos" data-moneda="USD" step="0.01" value="0">
-                        </div>
-                        <div class="total-pagar">
-                            Total USD: <span class="tarjeta-total-pagar" data-moneda="USD">USD 0.00</span>
-                        </div>
-                        <button type="button" class="btn-primary btn-pagar-resumen" data-moneda="USD">Pagar Resumen USD</button>
-                    </div>
+                <h4>Cuotas Incluidas en este Resumen</h4>
+                <div class="lista-cuotas-container" id="lista-cuotas-tarjeta">
+                    <!-- JS llenará esta lista -->
                 </div>
-                
+
+                <div class="total-pagar" style="font-size: 1.2em; margin: 15px 0;">
+                    Total Cuotas: <span id="total-cuotas-modal" style="font-weight: bold;">$0.00</span>
+                </div>
+
+                <div class="monto-pago-container">
+                    <label for="monto-pagado-resumen">Monto Total Pagado:</label>
+                    <input type="number" id="monto-pagado-resumen" step="0.01" required>
+                    <button type="button" class="btn-primary" id="btn-confirmar-pago-resumen">Confirmar Pago</button>
+                </div>
+
                 <div class="form-buttons">
                     <button type="button" class="btn-secondary" id="btn-cerrar-modal-tarjeta">Cancelar</button>
                 </div>
