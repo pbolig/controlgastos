@@ -199,7 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function actualizarSelectTarjetas() {
         if (!selectCuotaRecurrente) return;
         const valorActual = selectCuotaRecurrente.value;
-        selectCuotaRecurrente.innerHTML = '<option value="">-- Ninguna --</option>';
+        // Limpiamos solo las opciones de tarjetas, no la de "Crear Nueva"
+        Array.from(selectCuotaRecurrente.options).forEach(opt => { if(opt.value && opt.value !== 'nueva_tarjeta') opt.remove(); });
         tarjetasDisponibles.forEach(t => {
             selectCuotaRecurrente.appendChild(new Option(t.descripcion + ` (${t.moneda || 'ARS'})`, t.id));
         });
@@ -546,6 +547,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (formCuota) {
             formCuota.addEventListener('submit', (e) => { e.preventDefault(); handleFormSubmit(formCuota, () => { resetFormCuota(); refrescarPaneles(); }); });
+        }
+
+        // --- Funcionalidad extra: Crear tarjeta desde el form de cuotas ---
+        if (selectCuotaRecurrente) {
+            selectCuotaRecurrente.addEventListener('change', async (e) => {
+                if (e.target.value === 'nueva_tarjeta') {
+                    const nombreTarjeta = prompt("Ingresa el nombre para la nueva tarjeta (ej: Visa Banco X):");
+                    if (nombreTarjeta) {
+                        // Usamos una categoría por defecto o la primera que encontremos.
+                        const categoriaId = document.querySelector('#recurrente-categoria option:nth-child(2)')?.value;
+                        if (!categoriaId) {
+                            alert("No se encontraron categorías para asignar a la tarjeta. Por favor, crea una categoría primero.");
+                            selectCuotaRecurrente.value = ""; // Reseteamos la selección
+                            return;
+                        }
+                        const nuevaTarjeta = { descripcion: nombreTarjeta, monto_estimado: "0", dia_vencimiento: "1", tipo: 'tarjeta', categoria_id: categoriaId, moneda: 'ARS' };
+                        const d = await apiCall('/api/recurrente', 'POST', nuevaTarjeta);
+                        await cargarRecurrentesStatus(); // Recarga la lista de tarjetas y actualiza el select
+                        selectCuotaRecurrente.value = d.id; // Selecciona la tarjeta recién creada
+                    } else {
+                        selectCuotaRecurrente.value = ""; // Si cancela, reseteamos la selección
+                    }
+                }
+            });
         }
 
         // --- Funcionalidad extra: Auto-cálculo de cuotas ---
