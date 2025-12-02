@@ -310,6 +310,121 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 6. DELEGACIÓN DE EVENTOS ---
 
+    /**
+     * REFACTORIZACIÓN: Usamos un "Mapa de Acciones" para la delegación de eventos.
+     * Esto es más limpio y escalable que múltiples if/else.
+     */
+    const accionesRecurrentes = {
+        'btn-tarjeta': (target) => {
+            abrirModalTarjeta(target.dataset.id, target.dataset.desc);
+        },
+        'btn-pagar': async (target) => {
+            const { id, monto, desc, tipo, moneda } = target.dataset;
+            const real = prompt(`Confirmar pago de "${desc}".\nMonto real (${moneda}):`, monto);
+            if (real !== null && real !== "") {
+                await apiCall('/api/recurrente/pagar', 'POST', { recurrente_id: id, monto_pagado: real });
+                mostrarMensaje(`¡Pago procesado!`);
+                refrescarPaneles();
+            }
+        },
+        'btn-cobrar': async (target) => {
+            const { id, monto, desc, tipo, moneda } = target.dataset;
+            const real = prompt(`Confirmar cobro de "${desc}".\nMonto real (${moneda}):`, monto);
+            if (real !== null && real !== "") {
+                await apiCall('/api/recurrente/pagar', 'POST', { recurrente_id: id, monto_pagado: real });
+                mostrarMensaje(`¡Cobro procesado!`);
+                refrescarPaneles();
+            }
+        },
+        'btn-omitir': async (target) => {
+            if (confirm(`¿Omitir "${target.dataset.desc}" este mes?`)) {
+                const d = await apiCall('/api/recurrente/omitir', 'POST', { recurrente_id: target.dataset.id });
+                mostrarMensaje(d.mensaje);
+                refrescarPaneles();
+            }
+        },
+        'btn-historial': (target) => {
+            abrirModalHistorial(target.dataset.id);
+        },
+        'btn-eliminar-recurrente': async (target) => {
+            if (confirm(`¿Seguro que quieres eliminar "${target.dataset.desc}"? Esta acción no se puede deshacer.`)) {
+                await apiCall(`/api/recurrente/${target.dataset.id}`, 'DELETE');
+                mostrarMensaje("Recurrente eliminado.");
+                refrescarPaneles();
+            }
+        },
+        'btn-editar-recurrente': (target) => {
+            const data = JSON.parse(target.dataset.json);
+            formRecurrente.dataset.editId = data.id;
+            document.getElementById('recurrente-descripcion').value = data.descripcion;
+            document.getElementById('recurrente-monto').value = data.monto_estimado;
+            document.getElementById('recurrente-dia').value = data.dia_vencimiento;
+            document.getElementById('recurrente-categoria').value = data.categoria_id;
+            document.getElementById('recurrente-observacion').value = data.observacion || '';
+            if (document.getElementById('recurrente-moneda')) document.getElementById('recurrente-moneda').value = data.moneda || 'ARS';
+            if (document.getElementById('recurrente-tipo')) document.getElementById('recurrente-tipo').value = data.tipo || 'gasto';
+
+            formRecurrenteTitulo.textContent = 'Editar Gasto Recurrente';
+            btnSubmitRecurrente.textContent = 'Actualizar';
+            btnCancelarEdicion.style.display = 'block';
+            formRecurrente.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    const accionesCuotas = {
+        'btn-pagar-cuota': async (target) => {
+            const { id, monto, moneda, desc } = target.dataset;
+            if (confirm(`¿Confirmas el pago de la cuota de ${formatearMoneda(monto, moneda)} por "${desc}"?`)) {
+                await apiCall('/api/cuota/pagar', 'POST', { plan_id: id, cantidad_cuotas: 1 });
+                mostrarMensaje("Cuota pagada.");
+                refrescarPaneles();
+            }
+        },
+        'btn-editar-cuota': (target) => {
+            const data = JSON.parse(target.dataset.json);
+            formCuota.dataset.editId = data.id;
+            document.getElementById('cuota-descripcion').value = data.descripcion;
+            document.getElementById('cuota-total').value = data.monto_total;
+            document.getElementById('cuota-monto').value = data.monto_cuota;
+            document.getElementById('cuota-total-cuotas').value = data.total_cuotas;
+            document.getElementById('cuota-categoria').value = data.categoria_id;
+            document.getElementById('cuota-fecha-inicio').value = data.fecha_inicio;
+            if (document.getElementById('cuota-moneda')) document.getElementById('cuota-moneda').value = data.moneda || 'ARS';
+            if (selectCuotaRecurrente) selectCuotaRecurrente.value = data.recurrente_id || "";
+
+            formCuotaTitulo.textContent = 'Editar Plan';
+            btnSubmitCuota.textContent = 'Actualizar';
+            if (btnCancelarEdicionCuota) btnCancelarEdicionCuota.style.display = 'block';
+            formCuota.scrollIntoView({ behavior: 'smooth' });
+        },
+        'btn-eliminar-cuota': async (target) => {
+            if (confirm('¿Eliminar este plan de cuotas?')) {
+                await apiCall(`/api/cuota/${target.dataset.id}`, 'DELETE');
+                mostrarMensaje("Plan de cuotas eliminado.");
+                refrescarPaneles();
+            }
+        }
+    };
+
+    function manejarClickEnTabla(e, mapaDeAcciones) {
+        const target = e.target.closest('button, [class*="btn-"]');
+        if (!target) return;
+
+        const accion = Object.keys(mapaDeAcciones).find(clase => target.classList.contains(clase));
+        if (accion) {
+            e.preventDefault();
+            mapaDeAccionesaccion;
+        }
+    }
+
+    if (tablaRecurrentesBody) {
+        tablaRecurrentesBody.addEventListener('click', (e) => manejarClickEnTabla(e, accionesRecurrentes));
+    }
+
+    if (tablaCuotasBody) {
+        tablaCuotasBody.addEventListener('click', (e) => manejarClickEnTabla(e, accionesCuotas));
+    }
+
     // --- 7. MODALES (TARJETA Y HISTORIAL) ---
     const modalTarjeta = document.getElementById('modal-tarjeta');
     const modalTarjetaTitulo = document.getElementById('modal-tarjeta-titulo');
@@ -411,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }).then(r => r.json()).then(d => {
                     if(d.error) throw new Error(d.error); mostrarMensaje(d.mensaje);
                     modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200);
-                    cargarRecurrentesStatus(); cargarTransacciones(); cargarDashboardSummary(); cargarCuotasStatus();
+                    refrescarPaneles();
                 }).catch(e => alert(e.message));
             }
         });
@@ -435,13 +550,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if(btnCerrarHistorial) btnCerrarHistorial.addEventListener('click', () => { modalHistorial.style.opacity='0'; setTimeout(()=>modalHistorial.style.display='none',200); });
 
     // --- 8. INICIO Y CONFIGURACIÓN DE EVENTOS ---
-    
-    function inicializarApp() {
-        cargarCategorias();
+
+    // Función para refrescar todos los paneles principales
+    function refrescarPaneles() {
         cargarTransacciones();
         cargarRecurrentesStatus();
         cargarDashboardSummary();
         cargarCuotasStatus();
+    }
+    
+    async function inicializarApp() {
+        await cargarCategorias(); // Esperamos a que las categorías se carguen primero
+        refrescarPaneles();
+
+        // Añadimos los listeners para los formularios
     }
 
     inicializarApp();
