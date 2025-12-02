@@ -54,9 +54,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- NUEVO: Escuchar cambios en el selector de moneda del gráfico ---
-    divControlesGrafico.addEventListener('change', () => {
-        renderizarGrafico(); // Volver a dibujar el gráfico con la nueva moneda
-    });
+    if (divControlesGrafico) {
+        divControlesGrafico.addEventListener('change', () => {
+            renderizarGrafico(); // Volver a dibujar el gráfico con la nueva moneda
+        });
+    }
 
     // --- Función auxiliar para formatear moneda ---
     function formatearMoneda(numero, moneda = 'ARS') {
@@ -119,7 +121,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 4. RENDERIZAR GRÁFICO DE TORTA ---
     function renderizarGrafico() {
         // Leemos la moneda seleccionada en los radio buttons
-        const monedaSeleccionada = document.querySelector('input[name="grafico-moneda"]:checked').value;
+        const inputMoneda = document.querySelector('input[name="grafico-moneda"]:checked');
+        // Si no se encuentra el input (porque el HTML es viejo), usamos 'ARS' por defecto y no rompemos.
+        const monedaSeleccionada = inputMoneda ? inputMoneda.value : 'ARS';
 
         // Solo graficamos GASTOS para ver la distribución del dinero que sale
         const agrupado = {};

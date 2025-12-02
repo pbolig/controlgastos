@@ -52,10 +52,15 @@
         </section>
 
         <div class="dashboard-grid">
-            <!-- 2. GRÁFICO DE TORTA -->
-            <section class="widget">
-                <h2>Distribución por Categoría</h2>
-                <div style="height: 300px; display: flex; justify-content: center;">
+            <!-- 2. GRÁFICO DE TORTA (Ahora en una columna más ancha) -->
+            <section class="widget" style="grid-column: 1 / -1;">
+                <h2>Gráfico de Gastos</h2>
+                <div class="grafico-container">
+                    <!-- Selector de Moneda para el Gráfico -->
+                    <div class="grafico-controles">
+                        <label><input type="radio" name="grafico-moneda" value="ARS" checked> ARS</label>
+                        <label><input type="radio" name="grafico-moneda" value="USD"> USD</label>
+                    </div>
                     <canvas id="miGrafico"></canvas>
                 </div>
             </section>
