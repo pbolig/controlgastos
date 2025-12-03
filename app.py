@@ -92,6 +92,26 @@ def get_categorias():
     except sqlite3.Error as e:
         return jsonify({ "error": f"Error de base de datos: {e}" }), 500
 
+@app.route('/api/categoria', methods=['POST'])
+@login_required
+def agregar_categoria():
+    try:
+        data = request.get_json()
+        nombre = data.get('nombre')
+        if not nombre or not nombre.strip():
+            return jsonify({"error": "El nombre de la categoría no puede estar vacío."}), 400
+        
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre.strip(),))
+        db.commit()
+        
+        new_id = cursor.lastrowid
+        return jsonify({"mensaje": "Categoría creada exitosamente", "id": new_id, "nombre": nombre.strip()}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Esa categoría ya existe."}), 409
+    except Exception as e: return jsonify({"error": str(e)}), 500
+
 # --- === API DE TRANSACCIONES === ---
 @app.route('/api/transaccion', methods=['POST'])
 @login_required

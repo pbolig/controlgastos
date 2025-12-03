@@ -60,9 +60,10 @@
                     </div>
                     <div>
                         <label for="categoria">Categoría:</label>
-                        <select id="categoria" name="categoria_id">
-                            <option value="">Cargando...</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <select name="categoria_id" id="categoria" style="flex-grow: 1;"></select>
+                            <button type="button" id="btn-crear-categoria-transaccion" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                        </div>
                     </div>
                     <div>
                         <label for="transaccion-moneda">Moneda:</label>
@@ -101,9 +102,10 @@
                     </div>
                     <div>
                         <label for="recurrente-categoria">Categoría:</label>
-                        <select id="recurrente-categoria" name="categoria_id" required>
-                            <option value="">Cargando...</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <select id="recurrente-categoria" name="categoria_id" required style="flex-grow: 1;"></select>
+                            <button type="button" id="btn-crear-categoria-recurrente" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                        </div>
                     </div>
 
                     <div>
@@ -156,9 +158,10 @@
                     <!-- FIN SELECTOR -->
                     <div>
                         <label for="cuota-categoria">Categoría:</label>
-                        <select id="cuota-categoria" name="categoria_id" required>
-                            <option value="">Cargando...</option>
-                        </select>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <select id="cuota-categoria" name="categoria_id" required style="flex-grow: 1;"></select>
+                            <button type="button" id="btn-crear-categoria-cuota" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                        </div>
                     </div>
                     <div>
                         <label for="cuota-fecha-inicio">Fecha Inicio:</label>

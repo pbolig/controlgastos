@@ -96,16 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function cargarCategorias() {
         try {
             const data = await apiCall('/api/categorias');
-            [selectCategoria, selectRecurrenteCategoria, selectCuotaCategoria].forEach(sel => sel.innerHTML = '');
-            const def = new Option("-- Seleccionar --", "");
-            selectCategoria.appendChild(new Option("-- Sin Categoría --", ""));
-            selectRecurrenteCategoria.appendChild(def.cloneNode(true));
-            selectCuotaCategoria.appendChild(def.cloneNode(true));
-            data.forEach(c => {
-                const option = new Option(c.nombre, c.id);
-                selectCategoria.appendChild(option.cloneNode(true));
-                selectRecurrenteCategoria.appendChild(option.cloneNode(true));
-                selectCuotaCategoria.appendChild(option.cloneNode(true));
+            // REFACTOR: Limpiamos y repoblamos los selects de categoría de forma centralizada.
+            [selectCategoria, selectRecurrenteCategoria, selectCuotaCategoria].forEach(sel => {
+                if (!sel) return;
+                sel.innerHTML = ''; // Limpiamos todas las opciones
+                sel.appendChild(new Option("Sin Categoría", ""));
+                data.forEach(c => sel.appendChild(new Option(c.nombre, c.id)));
             });
         } catch (error) {
             console.error("No se pudieron cargar las categorías.", error);
@@ -276,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function handleFormSubmit(form, onSuccess) {
         const datos = Object.fromEntries(new FormData(form).entries());
+
         const id = form.dataset.editId;
         const endpoint = id ? `${form.dataset.endpoint}/${id}` : form.dataset.endpoint;
         const method = id ? 'PUT' : 'POST';
@@ -295,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSubmitRecurrente.textContent = 'Guardar Recurrente';
         btnCancelarEdicion.style.display = 'none';
         formRecurrente.dataset.editId = '';
+        if (selectRecurrenteCategoria) selectRecurrenteCategoria.value = "";
     }
     if(btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', resetFormRecurrente);
 
@@ -304,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSubmitCuota.textContent = 'Guardar Plan';
         if(btnCancelarEdicionCuota) btnCancelarEdicionCuota.style.display = 'none';
         formCuota.dataset.editId = '';
+        if (selectCuotaCategoria) selectCuotaCategoria.value = "";
     }
     if (btnCancelarEdicionCuota) btnCancelarEdicionCuota.addEventListener('click', resetFormCuota);
 
@@ -538,6 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.preventDefault();
                 handleFormSubmit(formTransaccion, () => {
                     formTransaccion.reset();
+                    if (selectCategoria) selectCategoria.value = ""; // Aseguramos el default
                     refrescarPaneles();
                 });
             });
@@ -588,6 +588,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         inputCuotaTotal.addEventListener('input', autoCalcularCuota);
         inputCuotaTotalCuotas.addEventListener('input', autoCalcularCuota);
+
+        // --- Funcionalidad extra: Crear categoría desde un botón ---
+        async function handleCrearCategoria(selectAsociado) {
+            const nombreCategoria = prompt("Ingresa el nombre para la nueva categoría:");
+            if (nombreCategoria) {
+                try {
+                    const nuevaCat = await apiCall('/api/categoria', 'POST', { nombre: nombreCategoria });
+                    await cargarCategorias(); // Recarga todas las listas de categorías
+                    if (selectAsociado) {
+                        selectAsociado.value = nuevaCat.id; // Selecciona la categoría recién creada en el combo correspondiente
+                    }
+                } catch (error) {
+                    // El error ya es manejado por apiCall
+                }
+            }
+        }
+
+        // Asignamos el evento a cada botón de "crear categoría"
+        document.getElementById('btn-crear-categoria-transaccion')?.addEventListener('click', () => handleCrearCategoria(selectCategoria));
+        document.getElementById('btn-crear-categoria-recurrente')?.addEventListener('click', () => handleCrearCategoria(selectRecurrenteCategoria));
+        document.getElementById('btn-crear-categoria-cuota')?.addEventListener('click', () => handleCrearCategoria(selectCuotaCategoria));
     }
 
     inicializarApp();
