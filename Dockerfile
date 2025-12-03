@@ -18,7 +18,7 @@ COPY . .
 # 6. Exponer el puerto en el que correrá Gunicorn
 EXPOSE 5000
 
-# 7. El comando para INICIAR la aplicación en producción
-# Llama a Gunicorn, le dice que escuche en todas las IPs (0.0.0.0:5000)
-# y que sirva la variable 'app' que está en el archivo 'app.py'
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+# 7. Comando de inicio: Primero ejecuta la migración y LUEGO inicia Gunicorn.
+# El '&&' asegura que Gunicorn solo se inicie si la migración es exitosa.
+# Esto automatiza la actualización de la base de datos cada vez que se despliega una nueva versión del contenedor.
+CMD ["sh", "-c", "python migracion_produccion.py && gunicorn --bind 0.0.0.0:5000 app:app"]
