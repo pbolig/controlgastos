@@ -27,7 +27,7 @@ try:
     ''')
     print("Tabla 'categorias' creada.")
 
-    # Tabla 2: Transacciones (sin cambios)
+    # Tabla 2: Transacciones (CONSOLIDADA)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS transacciones (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,12 +36,14 @@ try:
         tipo TEXT NOT NULL CHECK(tipo IN ('ingreso', 'gasto')),
         fecha DATE NOT NULL,
         categoria_id INTEGER,
+        moneda TEXT DEFAULT 'ARS',          -- <-- Añadido de migracion_multimoneda
+        comprobante_path TEXT,              -- <-- Añadido de migracion_comprobantes
         FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE SET NULL
     )
     ''')
     print("Tabla 'transacciones' creada.")
 
-    # Tabla 3: Gastos Recurrentes (sin cambios)
+    # Tabla 3: Gastos Recurrentes (CONSOLIDADA)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS gastos_recurrentes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +52,8 @@ try:
         dia_vencimiento INTEGER NOT NULL,
         categoria_id INTEGER NOT NULL,
         observacion TEXT,
-        tipo TEXT DEFAULT 'gasto', -- <-- NUEVO CAMPO
+        tipo TEXT DEFAULT 'gasto',          -- <-- Añadido previamente
+        moneda TEXT DEFAULT 'ARS',          -- <-- Añadido de migracion_multimoneda
         FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT
     )
     ''')
@@ -70,7 +73,7 @@ try:
     ''')
     print("Tabla 'pagos_recurrentes_log' creada.")
 
-    # --- Tabla 5: Planes de Cuotas (MODIFICADA) ---
+    # --- Tabla 5: Planes de Cuotas (CONSOLIDADA) ---
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS planes_cuotas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,11 +83,13 @@ try:
         total_cuotas INTEGER NOT NULL,
         cuota_actual INTEGER DEFAULT 0,
         fecha_inicio DATE NOT NULL,
-        
-        categoria_id INTEGER NOT NULL,  -- <-- CAMBIO: Añadido
-        ultimo_pago_mes INTEGER,        -- <-- CAMBIO: Añadido
-        ultimo_pago_anio INTEGER,       -- <-- CAMBIO: Añadido
-        
+        categoria_id INTEGER NOT NULL,
+        ultimo_pago_mes INTEGER,
+        ultimo_pago_anio INTEGER,
+        recurrente_id INTEGER,              -- <-- Añadido de migracion_local (para tarjetas)
+        moneda TEXT DEFAULT 'ARS',          -- <-- Añadido de migracion_multimoneda
+
+        FOREIGN KEY (recurrente_id) REFERENCES gastos_recurrentes(id) ON DELETE SET NULL,
         FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT
     )
     ''')

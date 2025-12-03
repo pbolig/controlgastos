@@ -72,6 +72,10 @@
                             <option value="USD">USD</option>
                         </select>
                     </div>
+                    <div>
+                        <label for="comprobante">Comprobante (Opcional):</label>
+                        <input type="file" id="comprobante" name="comprobante">
+                    </div>
                     <button type="submit" class="btn-primary">Agregar</button>
                 </form>
                 <div id="form-mensaje"></div>
@@ -231,6 +235,7 @@
                         <th>Categoría</th>
                         <th>Tipo</th>
                         <th>Monto</th>
+                        <th>Comprobante</th>
                     </tr>
                 </thead>
                 <tbody id="lista-transacciones-body">
@@ -263,6 +268,11 @@
                     <label for="monto-pagado-resumen">Monto Total Pagado:</label>
                     <input type="number" id="monto-pagado-resumen" step="0.01" required>
                     <button type="button" class="btn-primary" id="btn-confirmar-pago-resumen">Confirmar Pago</button>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <label for="comprobante-resumen">Comprobante (Opcional):</label>
+                    <input type="file" id="comprobante-resumen" name="comprobante">
                 </div>
 
                 <div class="form-buttons">
@@ -299,6 +309,32 @@
         </div>
     </div>
     <!-- === FIN MODAL DE HISTORIAL === -->
+
+    <!-- === MODAL DE PAGO GENÉRICO (para recurrentes y cuotas) === -->
+    <div id="modal-pago-generico" class="confirm-overlay" style="display: none; opacity: 0;">
+        <div class="confirm-dialog" style="max-width: 450px;">
+            <h3 id="modal-pago-titulo" style="margin-top: 0;">Confirmar Operación</h3>
+            <form id="form-pago-generico" onsubmit="return false;">
+                <p id="modal-pago-descripcion" style="margin-bottom: 20px;"></p>
+                
+                <div class="form-group" id="cont-monto-real" style="display: none;">
+                    <label for="pago-monto-real">Monto Real Pagado:</label>
+                    <input type="number" id="pago-monto-real" step="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="pago-comprobante">Comprobante (Opcional):</label>
+                    <input type="file" id="pago-comprobante" name="comprobante">
+                </div>
+
+                <div class="form-buttons" style="margin-top: 25px;">
+                    <button type="button" class="btn-primary" id="btn-confirmar-pago-generico">Confirmar</button>
+                    <button type="button" class="btn-secondary" id="btn-cerrar-pago-generico">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- === FIN MODAL DE PAGO GENÉRICO === -->
 
     <!-- Pie de página con versión -->
     <footer style="text-align: center; margin: 40px 0 20px; color: #95a5a6; font-size: 0.85em;">

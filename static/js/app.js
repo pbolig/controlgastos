@@ -71,11 +71,16 @@ document.addEventListener('DOMContentLoaded', () => {
      * @returns {Promise<any>} - La respuesta JSON del servidor.
      */
     async function apiCall(endpoint, method = 'GET', body = null) {
+        const isFormData = body instanceof FormData;
         const options = {
             method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {}, // Los headers se ajustan dinámicamente
         };
-        if (body) {
+
+        if (isFormData) {
+            options.body = body; // Para FormData, no se setea Content-Type, el browser lo hace.
+        } else if (body) {
+            options.headers['Content-Type'] = 'application/json';
             options.body = JSON.stringify(body);
         }
         try {
@@ -184,11 +189,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const color = t.tipo === 'gasto' ? 'red' : 'green';
         const f = t.fecha.split('-');
         const mon = t.moneda || 'ARS';
+        
+        // Añadimos el botón de comprobante si existe la ruta del archivo
+        const comprobanteBtn = t.comprobante_path 
+            ? `<a href="/uploads/${t.comprobante_path}" target="_blank" class="btn-accion" title="Ver Comprobante">📎</a>`
+            : '';
+
         return `
             <tr>
                 <td>${f[2]}/${f[1]}/${f[0]}</td> <td>${t.descripcion}</td>
                 <td>${t.categoria_nombre || 'N/A'}</td> <td>${t.tipo}</td>
                 <td style="color:${color}">${t.tipo === 'gasto' ? '-' : '+'}${formatearMoneda(t.monto, mon)}</td>
+                <td>${comprobanteBtn}</td>
             </tr>`;
     }
 
@@ -271,13 +283,22 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {function} onSucess - Callback a ejecutar tras el éxito.
      */
     async function handleFormSubmit(form, onSuccess) {
-        const datos = Object.fromEntries(new FormData(form).entries());
+        // Usamos FormData directamente para poder enviar archivos.
+        const formData = new FormData(form);
 
         const id = form.dataset.editId;
         const endpoint = id ? `${form.dataset.endpoint}/${id}` : form.dataset.endpoint;
         const method = id ? 'PUT' : 'POST';
 
         try {
+            // Para PUT con FormData, algunos backends esperan los datos en el body, no como form-data.
+            // Por simplicidad, si es PUT, lo convertimos a JSON (esto no soporta archivos en edición).
+            // Si es POST, enviamos FormData tal cual.
+            const datos = (method === 'PUT') ? Object.fromEntries(formData.entries()) : formData;
+            
+            // La función apiCall debe ser modificada para no siempre usar 'application/json'
+            // cuando se envía FormData.
+
             const d = await apiCall(endpoint, method, datos);
             mostrarMensaje(d.mensaje);
             onSuccess();
@@ -287,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetFormRecurrente() {
+        if (!formRecurrente) return;
         formRecurrente.reset();
         formRecurrenteTitulo.textContent = 'Definir Gasto Recurrente';
         btnSubmitRecurrente.textContent = 'Guardar Recurrente';
@@ -297,6 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', resetFormRecurrente);
 
     function resetFormCuota() {
+        if (!formCuota) return;
         formCuota.reset();
         formCuotaTitulo.textContent = 'Definir Plan de Cuotas';
         btnSubmitCuota.textContent = 'Guardar Plan';
@@ -305,6 +328,39 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectCuotaCategoria) selectCuotaCategoria.value = "";
     }
     if (btnCancelarEdicionCuota) btnCancelarEdicionCuota.addEventListener('click', resetFormCuota);
+
+    // --- MODAL DE PAGO GENÉRICO ---
+    const modalPagoGenerico = document.getElementById('modal-pago-generico');
+    const modalPagoTitulo = document.getElementById('modal-pago-titulo');
+    const modalPagoDescripcion = document.getElementById('modal-pago-descripcion');
+    const contMontoReal = document.getElementById('cont-monto-real');
+    const inputMontoReal = document.getElementById('pago-monto-real');
+    const formPagoGenerico = document.getElementById('form-pago-generico');
+    const btnConfirmarPagoGenerico = document.getElementById('btn-confirmar-pago-generico');
+    const btnCerrarPagoGenerico = document.getElementById('btn-cerrar-pago-generico');
+    let pagoGenericoCallback = null;
+
+    function abrirModalPagoGenerico({ titulo, descripcion, monto, necesitaMontoReal, callback }) {
+        modalPagoTitulo.textContent = titulo;
+        modalPagoDescripcion.textContent = descripcion;
+        inputMontoReal.value = monto || '';
+        contMontoReal.style.display = necesitaMontoReal ? 'block' : 'none';
+        formPagoGenerico.reset(); // Limpia el input de archivo
+        pagoGenericoCallback = callback;
+        modalPagoGenerico.style.display = 'flex';
+        setTimeout(() => modalPagoGenerico.style.opacity = '1', 10);
+    }
+
+    if (modalPagoGenerico) {
+        btnCerrarPagoGenerico.addEventListener('click', () => {
+            modalPagoGenerico.style.opacity = '0';
+            setTimeout(() => modalPagoGenerico.style.display = 'none', 200);
+        });
+        btnConfirmarPagoGenerico.addEventListener('click', () => {
+            if (pagoGenericoCallback) pagoGenericoCallback();
+        });
+    }
+
 
     // --- 6. DELEGACIÓN DE EVENTOS ---
 
@@ -316,23 +372,29 @@ document.addEventListener('DOMContentLoaded', () => {
         'btn-tarjeta': (target) => {
             abrirModalTarjeta(target.dataset.id, target.dataset.desc);
         },
-        'btn-pagar': async (target) => {
+        'btn-pagar': (target) => {
             const { id, monto, desc, tipo, moneda } = target.dataset;
-            const real = prompt(`Confirmar pago de "${desc}".\nMonto real (${moneda}):`, monto);
-            if (real !== null && real !== "") {
-                await apiCall('/api/recurrente/pagar', 'POST', { recurrente_id: id, monto_pagado: real });
-                mostrarMensaje(`¡Pago procesado!`);
-                refrescarPaneles();
-            }
+            abrirModalPagoGenerico({
+                titulo: `Pagar: ${desc}`,
+                descripcion: `Monto estimado: ${formatearMoneda(monto, moneda)}. Ingresa el monto real pagado.`,
+                monto: monto,
+                necesitaMontoReal: true,
+                callback: async () => {
+                    const formData = new FormData(formPagoGenerico);
+                    formData.append('recurrente_id', id);
+                    formData.append('monto_pagado', inputMontoReal.value);
+                    await apiCall('/api/recurrente/pagar', 'POST', formData);
+                    mostrarMensaje(`¡Pago procesado!`);
+                    btnCerrarPagoGenerico.click();
+                    refrescarPaneles();
+                }
+            });
         },
-        'btn-cobrar': async (target) => {
+        'btn-cobrar': (target) => {
             const { id, monto, desc, tipo, moneda } = target.dataset;
-            const real = prompt(`Confirmar cobro de "${desc}".\nMonto real (${moneda}):`, monto);
-            if (real !== null && real !== "") {
-                await apiCall('/api/recurrente/pagar', 'POST', { recurrente_id: id, monto_pagado: real });
-                mostrarMensaje(`¡Cobro procesado!`);
-                refrescarPaneles();
-            }
+            // FIX: Reutilizamos la misma lógica de 'btn-pagar' ya que el endpoint es el mismo.
+            // Se pasa el 'target' para que la función 'btn-pagar' tenga acceso a los datos.
+            accionesRecurrentes['btn-pagar'](target);
         },
         'btn-omitir': async (target) => {
             if (confirm(`¿Omitir "${target.dataset.desc}" este mes?`)) {
@@ -370,13 +432,23 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const accionesCuotas = {
-        'btn-pagar-cuota': async (target) => {
+        'btn-pagar-cuota': (target) => {
             const { id, monto, moneda, desc } = target.dataset;
-            if (confirm(`¿Confirmas el pago de la cuota de ${formatearMoneda(monto, moneda)} por "${desc}"?`)) {
-                await apiCall('/api/cuota/pagar', 'POST', { plan_id: id, cantidad_cuotas: 1 });
-                mostrarMensaje("Cuota pagada.");
-                refrescarPaneles();
-            }
+            abrirModalPagoGenerico({
+                titulo: `Pagar Cuota: ${desc}`,
+                descripcion: `Confirmas el pago de la cuota por ${formatearMoneda(monto, moneda)}.`,
+                monto: monto,
+                necesitaMontoReal: false,
+                callback: async () => {
+                    const formData = new FormData(formPagoGenerico);
+                    formData.append('plan_id', id);
+                    formData.append('cantidad_cuotas', 1);
+                    await apiCall('/api/cuota/pagar', 'POST', formData);
+                    mostrarMensaje("Cuota pagada.");
+                    btnCerrarPagoGenerico.click();
+                    refrescarPaneles();
+                }
+            });
         },
         'btn-editar-cuota': (target) => {
             const data = JSON.parse(target.dataset.json);
@@ -478,17 +550,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200); });
 
         btnConfirmarPagoResumen.addEventListener('click', async () => {
-            const recurrenteId = document.getElementById('tarjeta-recurrente-id').value;
-            const montoPagado = parseFloat(document.getElementById('monto-pagado-resumen').value);
-
-            if (!montoPagado || montoPagado <= 0) {
+            if (parseFloat(document.getElementById('monto-pagado-resumen').value) <= 0) {
                 return alert("El monto pagado debe ser mayor a cero.");
             }
-            if (confirm(`¿Confirmas el pago del resumen por un total de ${formatearMoneda(montoPagado)}?`)) {
-
+            
+            const formData = new FormData(formPagoTarjeta);
+            // Añadimos el ID del recurrente que no está en el form directamente
+            formData.append('recurrente_id', document.getElementById('tarjeta-recurrente-id').value);
+            if (confirm(`¿Confirmas el pago del resumen?`)) {
                 try {
-                    const data = { recurrente_id: recurrenteId, monto_pagado: montoPagado };
-                    const d = await apiCall('/api/tarjeta/pagar-resumen', 'POST', data);
+                    const d = await apiCall('/api/tarjeta/pagar-resumen', 'POST', formData);
                     mostrarMensaje(d.mensaje);
                     modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200);
                     refrescarPaneles();

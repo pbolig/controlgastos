@@ -1,12 +1,22 @@
 import sqlite3
 import os
-import datetime
+from datetime import date, datetime
 from functools import wraps
-from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for, send_from_directory
+import uuid
+from werkzeug.utils import secure_filename
 
 # --- Configuración de la Aplicación Flask ---
 app = Flask(__name__)
 app.config['DATABASE'] = os.path.join(app.instance_path, 'gastos.db')
+
+# --- Configuración para Subida de Archivos ---
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# Nos aseguramos de que la carpeta de subidas exista.
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 
 # --- VERSIÓN DE LA APP ---
 APP_VERSION = "v1.2.0"
@@ -66,6 +76,36 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
+# --- Helper para guardar comprobantes ---
+def guardar_comprobante(file_storage):
+    """
+    Guarda un archivo de comprobante en una carpeta anual y devuelve la ruta relativa.
+    Retorna None si no hay archivo o si ocurre un error.
+    """
+    if not file_storage or file_storage.filename == '':
+        return None
+
+    try:
+        # 1. Crear la carpeta del año actual (ej: 'uploads/2024')
+        current_year = str(datetime.now().year)
+        year_folder = os.path.join(app.config['UPLOAD_FOLDER'], current_year)
+        os.makedirs(year_folder, exist_ok=True)
+
+        # 2. Generar un nombre de archivo seguro y único
+        original_filename = secure_filename(file_storage.filename)
+        extension = os.path.splitext(original_filename)[1]
+        unique_filename = f"{uuid.uuid4().hex}{extension}"
+        
+        # 3. Guardar el archivo
+        save_path = os.path.join(year_folder, unique_filename)
+        file_storage.save(save_path)
+        
+        # 4. Devolver la ruta relativa para la base de datos (ej: '2024/nombre_unico.pdf')
+        return os.path.join(current_year, unique_filename).replace('\\', '/')
+    except Exception as e:
+        print(f"Error al guardar el archivo: {e}")
+        return None
+
 # --- Rutas Principales (Frontend y API) ---
 
 @app.route('/')
@@ -117,26 +157,29 @@ def agregar_categoria():
 @login_required
 def agregar_transaccion():
     try:
-        data = request.get_json()
-        descripcion = data.get('descripcion')
-        monto = data.get('monto')
-        tipo = data.get('tipo')
-        categoria_id = data.get('categoria_id')
+        # Cambiamos a request.form para recibir datos de formulario con archivos
+        datos = request.form
+        descripcion = datos.get('descripcion')
+        monto = datos.get('monto')
+        tipo = datos.get('tipo')
+        categoria_id = datos.get('categoria_id')
         # Leemos la moneda, con 'ARS' como valor por defecto
-        moneda = data.get('moneda', 'ARS')
+        moneda = datos.get('moneda', 'ARS')
+        comprobante_file = request.files.get('comprobante')
 
         if not descripcion or not monto or not tipo:
             return jsonify({ "error": "Descripción, monto y tipo son obligatorios." }), 400
 
+        comprobante_path = guardar_comprobante(comprobante_file)
         monto_float = float(monto)
-        fecha_hoy = datetime.date.today()
+        fecha_hoy = date.today()
         categoria_id_int = int(categoria_id) if categoria_id else None
 
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
-            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, ?, ?, ?, ?)",
-            (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int, moneda)
+            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int, moneda, comprobante_path)
         )
         db.commit()
         return jsonify({ "mensaje": "Transacción agregada exitosamente", "id": cursor.lastrowid }), 201
@@ -150,8 +193,9 @@ def get_transacciones():
         db = get_db()
         cursor = db.cursor()
         # Formateamos fecha a YYYY-MM-DD para el frontend
+        # Añadimos la columna comprobante_path a la consulta
         cursor.execute("""
-            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) AS fecha, c.nombre AS categoria_nombre 
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) AS fecha, c.nombre AS categoria_nombre, t.comprobante_path
             FROM transacciones AS t 
             LEFT JOIN categorias AS c ON t.categoria_id = c.id
             ORDER BY t.fecha DESC, t.id DESC
@@ -225,7 +269,7 @@ def editar_recurrente(id):
 @login_required
 def get_recurrentes_status():
     try:
-        hoy = datetime.date.today()
+        hoy = date.today()
         db = get_db()
         cursor = db.cursor()
         cursor.execute("""
@@ -251,7 +295,7 @@ def omitir_recurrente():
     try:
         data = request.get_json()
         recurrente_id = data.get('recurrente_id')
-        hoy = datetime.date.today()
+        hoy = date.today()
         
         db = get_db()
         cursor = db.cursor()
@@ -294,12 +338,15 @@ def historial_recurrente(id):
 @login_required
 def pagar_recurrente():
     try:
-        data = request.get_json()
-        hoy = datetime.date.today()
+        datos = request.form
+        comprobante_file = request.files.get('comprobante')
+        hoy = date.today()
         db = get_db()
+        
+        comprobante_path = guardar_comprobante(comprobante_file)
         cursor = db.cursor()
         with db:
-            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (data['recurrente_id'],))
+            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (datos['recurrente_id'],))
             recurrente = cursor.fetchone()
             
             # Usamos el tipo del recurrente (ingreso o gasto)
@@ -310,12 +357,12 @@ def pagar_recurrente():
             desc = f"{accion_txt} recurrente: {recurrente['descripcion']}"
             
             # Insertamos usando el 'tipo_movimiento' correcto (esto arregla la resta/suma)
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, ?, ?, ?, ?)",
-                           (desc, float(data['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id'], recurrente['moneda']))
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (desc, float(datos['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id'], recurrente['moneda'], comprobante_path))
             
             new_id = cursor.lastrowid
             cursor.execute("INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
-                           (data['recurrente_id'], new_id, hoy.month, hoy.year))
+                           (datos['recurrente_id'], new_id, hoy.month, hoy.year))
         return jsonify({ "mensaje": "Procesado exitosamente" }), 201
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
 
@@ -324,7 +371,7 @@ def pagar_recurrente():
 @login_required
 def get_dashboard_summary():
     try:
-        hoy = datetime.date.today()
+        hoy = date.today()
         mes_formato = f"{hoy.year:04d}-{hoy.month:02d}"
         db = get_db()
         
@@ -365,7 +412,7 @@ def get_dashboard_summary():
 def agregar_plan_cuota():
     try:
         d = request.get_json()
-        f = datetime.date.fromisoformat(d['fecha_inicio'])
+        f = date.fromisoformat(d['fecha_inicio'])
         # Capturamos el ID de la tarjeta (puede venir vacío)
         rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
         moneda = d.get('moneda', 'ARS')
@@ -384,7 +431,7 @@ def agregar_plan_cuota():
 @login_required
 def get_cuotas_status():
     try:
-        hoy = datetime.date.today()
+        hoy = date.today()
         db = get_db()
         cursor = db.cursor()
         # Agregamos p.recurrente_id a la consulta
@@ -401,13 +448,16 @@ def get_cuotas_status():
 @login_required
 def pagar_cuota():
     try:
-        data = request.get_json()
-        cant = int(data.get('cantidad_cuotas', 1))
-        hoy = datetime.date.today()
+        datos = request.form
+        comprobante_file = request.files.get('comprobante')
+        cant = int(datos.get('cantidad_cuotas', 1))
+        hoy = date.today()
         db = get_db()
+
+        comprobante_path = guardar_comprobante(comprobante_file)
         cursor = db.cursor()
         with db:
-            cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (data['plan_id'],))
+            cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (datos['plan_id'],))
             plan = cursor.fetchone()
             
             restantes = plan['total_cuotas'] - plan['cuota_actual']
@@ -418,8 +468,8 @@ def pagar_cuota():
             desc = f"Pago Cuota(s) ({plan['cuota_actual']+1} a {plan['cuota_actual']+cant}/{plan['total_cuotas']}): {plan['descripcion']}"
             if cant == 1: desc = f"Pago Cuota ({plan['cuota_actual']+1}/{plan['total_cuotas']}): {plan['descripcion']}"
             
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, 'gasto', ?, ?, ?)",
-                           (desc, monto_total, hoy, plan['categoria_id'], plan['moneda']))
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, 'gasto', ?, ?, ?, ?)",
+                           (desc, monto_total, hoy, plan['categoria_id'], plan['moneda'], comprobante_path))
             new_id = cursor.lastrowid
             cursor.execute("UPDATE planes_cuotas SET cuota_actual=?, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
                            (plan['cuota_actual']+cant, hoy.month, hoy.year, plan['id']))
@@ -442,7 +492,7 @@ def eliminar_cuota(id):
 def editar_plan_cuota(id):
     try:
         d = request.get_json()
-        f = datetime.date.fromisoformat(d['fecha_inicio'])
+        f = date.fromisoformat(d['fecha_inicio'])
         rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
         moneda = d.get('moneda', 'ARS')
 
@@ -467,7 +517,7 @@ def filtrar_reportes():
         data = request.get_json()
         # ¡AQUÍ ESTABA EL ERROR! Ahora usamos strftime para que el JS reciba la fecha limpia
         query = """
-            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre, t.comprobante_path
             FROM transacciones t
             LEFT JOIN categorias c ON t.categoria_id = c.id
             WHERE 1=1
@@ -510,13 +560,16 @@ def filtrar_reportes():
 @login_required
 def pagar_resumen_tarjeta():
     try:
-        # Lógica simplificada: El usuario solo informa el monto total pagado.
-        data = request.get_json()
-        recurrente_id = data.get('recurrente_id')
-        monto_pagado = float(data.get('monto_pagado', 0))
+        # Cambiamos a request.form y request.files
+        datos = request.form
+        comprobante_file = request.files.get('comprobante')
+        recurrente_id = datos.get('recurrente_id')
+        monto_pagado = float(datos.get('monto_pagado', 0))
         
-        hoy = datetime.date.today()
+        hoy = date.today()
         db = get_db()
+
+        comprobante_path = guardar_comprobante(comprobante_file)
         cursor = db.cursor()
 
         with db:
@@ -559,8 +612,8 @@ def pagar_resumen_tarjeta():
 
             # 4. Insertar la transacción ÚNICA por el total
             cursor.execute(
-                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda) VALUES (?, ?, 'gasto', ?, ?, ?)",
-                (desc, monto_pagado, hoy, tarjeta['categoria_id'], moneda_pago)
+                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, 'gasto', ?, ?, ?, ?)",
+                (desc, monto_pagado, hoy, tarjeta['categoria_id'], moneda_pago, comprobante_path)
             )
             transaccion_id = cursor.lastrowid
 
@@ -574,6 +627,13 @@ def pagar_resumen_tarjeta():
 
     except Exception as e:
         return jsonify({ "error": str(e) }), 500
+
+# --- RUTA PARA SERVIR ARCHIVOS ---
+@app.route('/uploads/<path:filepath>')
+@login_required
+def serve_upload(filepath):
+    """Sirve un archivo desde la carpeta de uploads de forma segura."""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
 
 # --- INICIO SERVIDOR ---
 if __name__ == '__main__':
