@@ -680,6 +680,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btn-crear-categoria-transaccion')?.addEventListener('click', () => handleCrearCategoria(selectCategoria));
         document.getElementById('btn-crear-categoria-recurrente')?.addEventListener('click', () => handleCrearCategoria(selectRecurrenteCategoria));
         document.getElementById('btn-crear-categoria-cuota')?.addEventListener('click', () => handleCrearCategoria(selectCuotaCategoria));
+
+        // --- Funcionalidad extra: Cerrar modales con la tecla 'Escape' ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // Reutilizamos la lógica de los botones de cierre para mantener la consistencia
+                if (modalTarjeta && modalTarjeta.style.display === 'flex') {
+                    btnCerrarModalTarjeta.click();
+                }
+                if (modalHistorial && modalHistorial.style.display === 'flex') {
+                    btnCerrarHistorial.click();
+                }
+                if (modalPagoGenerico && modalPagoGenerico.style.display === 'flex') {
+                    btnCerrarPagoGenerico.click();
+                }
+            }
+        });
     }
 
     inicializarApp();
