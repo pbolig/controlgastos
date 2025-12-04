@@ -225,19 +225,19 @@ def get_transacciones():
 @login_required
 def agregar_recurrente():
     try:
-        data = request.get_json()
+        datos = request.form
         # Por defecto es 'gasto' si no se especifica
-        tipo = data.get('tipo', 'gasto') 
-        moneda = data.get('moneda', 'ARS')
+        tipo = datos.get('tipo', 'gasto') 
+        moneda = datos.get('moneda', 'ARS')
         
-        if not all([data.get('descripcion'), data.get('monto_estimado'), data.get('dia_vencimiento'), data.get('categoria_id')]):
+        if not all([datos.get('descripcion'), datos.get('monto_estimado'), datos.get('dia_vencimiento'), datos.get('categoria_id')]):
             return jsonify({ "error": "Faltan campos obligatorios." }), 400
         
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
             "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo, moneda) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (data['descripcion'], float(data['monto_estimado']), int(data['dia_vencimiento']), int(data['categoria_id']), data.get('observacion'), tipo, moneda)
+            (datos['descripcion'], float(datos['monto_estimado']), int(datos['dia_vencimiento']), int(datos['categoria_id']), datos.get('observacion'), tipo, moneda)
         )
         db.commit()
         return jsonify({ "mensaje": "Movimiento recurrente guardado", "id": cursor.lastrowid }), 201
