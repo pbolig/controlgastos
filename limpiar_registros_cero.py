@@ -1,7 +1,9 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join('instance', 'gastos.db')
+# MODIFICACIÓN: Apuntamos directamente a la ruta de la base de datos de producción
+# que se usa en el volumen de Docker.
+DB_PATH = '/var/www/gastos-data/gastos.db'
 
 def limpiar_registros_cero():
     """
