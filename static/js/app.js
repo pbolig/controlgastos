@@ -550,13 +550,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200); });
 
         btnConfirmarPagoResumen.addEventListener('click', async () => {
-            if (parseFloat(document.getElementById('monto-pagado-resumen').value) <= 0) {
+            if (parseFloat(document.getElementById('monto-pagado-resumen').value) < 0) {
                 return alert("El monto pagado debe ser mayor a cero.");
             }
             
             const formData = new FormData(formPagoTarjeta);
-            // Añadimos el ID del recurrente que no está en el form directamente
+            // Añadimos el ID del recurrente y el monto pagado que no están en el form directamente
             formData.append('recurrente_id', document.getElementById('tarjeta-recurrente-id').value);
+            formData.append('monto_pagado', document.getElementById('monto-pagado-resumen').value);
             if (confirm(`¿Confirmas el pago del resumen?`)) {
                 try {
                     const d = await apiCall('/api/tarjeta/pagar-resumen', 'POST', formData);
