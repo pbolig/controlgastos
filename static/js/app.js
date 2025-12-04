@@ -681,6 +681,59 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btn-crear-categoria-recurrente')?.addEventListener('click', () => handleCrearCategoria(selectRecurrenteCategoria));
         document.getElementById('btn-crear-categoria-cuota')?.addEventListener('click', () => handleCrearCategoria(selectCuotaCategoria));
 
+        // --- Funcionalidad extra: Registro de dispositivo WebAuthn ---
+        const btnWebAuthnRegister = document.getElementById('btn-webauthn-register');
+        if (btnWebAuthnRegister) {
+            // Solo mostramos el botón si el navegador es compatible
+            if (!window.PublicKeyCredential) {
+                btnWebAuthnRegister.style.display = 'none';
+            }
+
+            btnWebAuthnRegister.addEventListener('click', async () => {
+                try {
+                    // Funciones auxiliares para convertir formatos
+                    const bufferDecode = (value) => Uint8Array.from(atob(value.replace(/_/g, '/').replace(/-/g, '+')), c => c.charCodeAt(0));
+                    const bufferEncode = (value) => btoa(String.fromCharCode.apply(null, new Uint8Array(value))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+                    // 1. Pedir opciones de registro al servidor
+                    const respBegin = await fetch('/api/webauthn/register-begin', { method: 'POST' });
+                    let options = await respBegin.json();
+
+                    // 2. Convertir los campos necesarios a ArrayBuffer
+                    options.challenge = bufferDecode(options.challenge);
+                    options.user.id = bufferDecode(options.user.id);
+                    if (options.excludeCredentials) {
+                        options.excludeCredentials.forEach(cred => {
+                            cred.id = bufferDecode(cred.id);
+                        });
+                    }
+
+                    // 3. Pedir al navegador que cree la credencial (esto activa la biometría)
+                    const credential = await navigator.credentials.create({ publicKey: options });
+
+                    // 4. Convertir la respuesta para poder enviarla como JSON
+                    const credentialJSON = {
+                        id: credential.id,
+                        rawId: bufferEncode(credential.rawId),
+                        response: {
+                            clientDataJSON: bufferEncode(credential.response.clientDataJSON),
+                            attestationObject: bufferEncode(credential.response.attestationObject),
+                        },
+                        type: credential.type,
+                    };
+
+                    // 5. Enviar la nueva credencial al servidor para guardarla
+                    const respComplete = await fetch('/api/webauthn/register-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentialJSON) });
+                    const verification = await respComplete.json();
+                    alert(verification.mensaje || verification.error);
+
+                } catch (err) {
+                    console.error("Error durante el registro biométrico:", err);
+                    alert("No se pudo registrar el dispositivo. " + err.message);
+                }
+            });
+        }
+
         // --- Funcionalidad extra: Cerrar modales con la tecla 'Escape' ---
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {

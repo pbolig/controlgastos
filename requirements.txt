@@ -1,3 +1,5 @@
 Flask
 gunicorn
 Werkzeug
+# Librería para autenticación biométrica (Face ID, huella, etc.)
+webauthn>=1.9.0

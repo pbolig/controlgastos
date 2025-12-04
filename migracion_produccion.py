@@ -34,6 +34,7 @@ def migrar_produccion():
         ('planes_cuotas', 'ultimo_pago_anio', 'INTEGER'),
         ('planes_cuotas', 'recurrente_id', 'INTEGER'),
         ('planes_cuotas', 'moneda', 'TEXT DEFAULT "ARS"'),
+        # La tabla de webauthn se crea entera, no se altera
     ]
 
     print("\nIniciando revisión del esquema de la base de datos...")
@@ -50,6 +51,21 @@ def migrar_produccion():
                 print(f"  -> Verificado: La columna '{columna}' ya existe en la tabla '{tabla}'. No se necesita acción.")
         except sqlite3.OperationalError as e:
             print(f"     Error al migrar la tabla '{tabla}': {e}")
+
+    # --- Creación de tabla para WebAuthn ---
+    try:
+        print("  -> Verificando tabla 'webauthn_credentials'...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS webauthn_credentials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                credential_id BLOB NOT NULL UNIQUE,
+                public_key BLOB NOT NULL,
+                sign_count INTEGER NOT NULL
+            )
+        """)
+        print("     Tabla 'webauthn_credentials' asegurada.")
+    except sqlite3.OperationalError as e:
+        print(f"     Error al crear la tabla 'webauthn_credentials': {e}")
 
     print("\nRevisión del esquema completada.")
     con.close()

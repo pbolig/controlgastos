@@ -4,6 +4,7 @@ from datetime import date, datetime
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for, send_from_directory
 import uuid
+from webauthn import generate_registration_options, verify_registration_response, generate_authentication_options, verify_authentication_response, base64url_to_bytes
 from werkzeug.utils import secure_filename
 
 # --- Configuración de la Aplicación Flask ---
@@ -19,11 +20,17 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 
 # --- VERSIÓN DE LA APP ---
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v2.0.0"
 
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
-PASSWORD_MAESTRA = "Juani2008**"
+# Leemos la contraseña desde una variable de entorno para más seguridad
+PASSWORD_MAESTRA = os.environ.get("APP_PASSWORD", "Juani2008**")
+
+# --- Configuración de WebAuthn ---
+RP_ID = "localhost"  # En producción, debe ser tu dominio real (ej: "gastos.ejemplo.com")
+RP_NAME = "Control de Gastos"
+ORIGIN = "http://localhost:5000" # En producción, debe ser tu URL real (ej: "https://gastos.ejemplo.com")
 
 # --- Decorador @login_required ---
 def login_required(f):
@@ -64,7 +71,7 @@ def login():
     error = None
     if request.method == 'POST':
         password_ingresada = request.form['password']
-        if password_ingresada == PASSWORD_MAESTRA:
+        if password_ingresada == PASSWORD_MAESTRA: # Usamos la variable
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -112,7 +119,7 @@ def guardar_comprobante(file_storage):
 @login_required
 def index():
     """Ruta principal que sirve el dashboard (el archivo HTML)."""
-    return render_template('index.html', version=APP_VERSION)
+    return render_template('index.html', version=APP_VERSION, webauthn_enabled=True)
 
 @app.route('/api/test')
 @login_required
@@ -634,6 +641,102 @@ def pagar_resumen_tarjeta():
 def serve_upload(filepath):
     """Sirve un archivo desde la carpeta de uploads de forma segura."""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
+
+# --- === API DE WEBAUTHN (AUTENTICACIÓN BIOMÉTRICA) === ---
+
+@app.route('/api/webauthn/register-begin', methods=['POST'])
+@login_required # Solo un usuario logueado puede registrar un dispositivo
+def webauthn_register_begin():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT credential_id FROM webauthn_credentials")
+    existing_credentials = [row[0] for row in cursor.fetchall()]
+
+    options = generate_registration_options(
+        rp_id=RP_ID,
+        rp_name=RP_NAME,
+        user_id="master_user", # ID de usuario fijo para esta app
+        user_name="Usuario Principal",
+        exclude_credentials=[{"id": cred_id, "type": "public-key"} for cred_id in existing_credentials]
+    )
+    session['webauthn_challenge'] = options['challenge']
+    return jsonify(options)
+
+@app.route('/api/webauthn/register-complete', methods=['POST'])
+@login_required
+def webauthn_register_complete():
+    body = request.get_json()
+    challenge = session.pop('webauthn_challenge', None)
+
+    try:
+        verification = verify_registration_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_origin=ORIGIN,
+            expected_rp_id=RP_ID,
+            require_user_verification=True
+        )
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute(
+            "INSERT INTO webauthn_credentials (credential_id, public_key, sign_count) VALUES (?, ?, ?)",
+            (verification.credential_id, verification.credential_public_key, verification.sign_count)
+        )
+        db.commit()
+        return jsonify({"verified": True, "mensaje": "Dispositivo registrado con éxito."})
+    except Exception as e:
+        return jsonify({"verified": False, "error": f"Fallo en la verificación: {e}"}), 400
+
+@app.route('/api/webauthn/login-begin', methods=['POST'])
+def webauthn_login_begin():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT credential_id FROM webauthn_credentials")
+    existing_credentials = [row[0] for row in cursor.fetchall()]
+
+    if not existing_credentials:
+        return jsonify({"error": "No hay dispositivos registrados para inicio de sesión biométrico."}), 404
+
+    options = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=[{"id": cred_id, "type": "public-key"} for cred_id in existing_credentials]
+    )
+    session['webauthn_challenge'] = options['challenge']
+    return jsonify(options)
+
+@app.route('/api/webauthn/login-complete', methods=['POST'])
+def webauthn_login_complete():
+    body = request.get_json()
+    challenge = session.pop('webauthn_challenge', None)
+    credential_id = base64url_to_bytes(body['id'])
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM webauthn_credentials WHERE credential_id = ?", (credential_id,))
+    credential_data = cursor.fetchone()
+
+    if not credential_data:
+        return jsonify({"verified": False, "error": "Credencial no reconocida."}), 404
+
+    try:
+        verification = verify_authentication_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=ORIGIN,
+            credential_public_key=credential_data['public_key'],
+            credential_current_sign_count=credential_data['sign_count'],
+            require_user_verification=True
+        )
+        # ¡Éxito! El usuario está autenticado.
+        session['logged_in'] = True
+        # Actualizamos el contador de firmas para prevenir clonación de credenciales
+        cursor.execute("UPDATE webauthn_credentials SET sign_count = ? WHERE id = ?", (verification.new_sign_count, credential_data['id']))
+        db.commit()
+        return jsonify({"verified": True})
+    except Exception as e:
+        return jsonify({"verified": False, "error": f"Fallo en la verificación: {e}"}), 400
 
 # --- INICIO SERVIDOR ---
 if __name__ == '__main__':
