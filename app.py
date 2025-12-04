@@ -26,7 +26,7 @@ APP_VERSION = "v2.0.0"
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
 # Leemos la contraseña desde una variable de entorno para más seguridad
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30) # <-- Tiempo de vida de la sesión
-PASSWORD_MAESTRA = os.environ.get("APP_PASSWORD", "Juani2008**")
+PASSWORD_MAESTRA = os.environ.get("PASSWORD_MAESTRA", "Juani2008**")
 
 # --- Configuración de WebAuthn ---
 RP_ID = "localhost"  # En producción, debe ser tu dominio real (ej: "gastos.ejemplo.com")
