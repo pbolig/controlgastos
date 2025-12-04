@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for, send_from_directory
 import uuid
@@ -25,6 +25,7 @@ APP_VERSION = "v2.0.0"
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
 # Leemos la contraseña desde una variable de entorno para más seguridad
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30) # <-- Tiempo de vida de la sesión
 PASSWORD_MAESTRA = os.environ.get("APP_PASSWORD", "Juani2008**")
 
 # --- Configuración de WebAuthn ---
@@ -63,6 +64,12 @@ def close_db(e=None):
     if db is not None:
         db.close()
 
+@app.before_request
+def before_request_func():
+    """Refresca el tiempo de la sesión en cada petición."""
+    session.permanent = True
+    session.modified = True
+
 # --- RUTAS DE AUTENTICACIÓN ---
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -72,6 +79,7 @@ def login():
     if request.method == 'POST':
         password_ingresada = request.form['password']
         if password_ingresada == PASSWORD_MAESTRA: # Usamos la variable
+            session.permanent = True # Hacemos la sesión permanente
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -730,6 +738,8 @@ def webauthn_login_complete():
             require_user_verification=True
         )
         # ¡Éxito! El usuario está autenticado.
+        # Hacemos la sesión permanente para que se aplique el timeout
+        session.permanent = True
         session['logged_in'] = True
         # Actualizamos el contador de firmas para prevenir clonación de credenciales
         cursor.execute("UPDATE webauthn_credentials SET sign_count = ? WHERE id = ?", (verification.new_sign_count, credential_data['id']))

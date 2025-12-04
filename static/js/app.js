@@ -749,6 +749,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+
+        // --- Funcionalidad extra: Timeout por inactividad ---
+        let inactivityTimer;
+        const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutos en milisegundos
+
+        function logoutUser() {
+            window.location.href = '/logout';
+        }
+
+        function resetInactivityTimer() {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(logoutUser, INACTIVITY_TIMEOUT);
+        }
+
+        // Resetea el temporizador con cualquier actividad del usuario
+        window.addEventListener('mousemove', resetInactivityTimer);
+        window.addEventListener('keydown', resetInactivityTimer);
+        window.addEventListener('click', resetInactivityTimer);
+        resetInactivityTimer(); // Inicia el temporizador al cargar la página
     }
 
     inicializarApp();
