@@ -29,9 +29,11 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30) # <-- Tiempo de
 PASSWORD_MAESTRA = os.environ.get("PASSWORD_MAESTRA", "Juani2008**")
 
 # --- Configuración de WebAuthn ---
-RP_ID = "localhost"  # En producción, debe ser tu dominio real (ej: "gastos.ejemplo.com")
+# Leemos la configuración de WebAuthn desde variables de entorno para que sea flexible
+# entre desarrollo y producción.
+RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
 RP_NAME = "Control de Gastos"
-ORIGIN = "http://localhost:5000" # En producción, debe ser tu URL real (ej: "https://gastos.ejemplo.com")
+ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5000")
 
 # --- Decorador @login_required ---
 def login_required(f):
@@ -426,17 +428,18 @@ def get_dashboard_summary():
 @login_required
 def agregar_plan_cuota():
     try:
-        d = request.get_json()
-        f = date.fromisoformat(d['fecha_inicio'])
+        datos = request.form
+        f = date.fromisoformat(datos['fecha_inicio'])
         # Capturamos el ID de la tarjeta (puede venir vacío)
-        rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
-        moneda = d.get('moneda', 'ARS')
+        rec_id_str = datos.get('recurrente_id')
+        rec_id = int(rec_id_str) if rec_id_str and rec_id_str.isdigit() else None
+        moneda = datos.get('moneda', 'ARS')
         
         db = get_db()
         cursor = db.cursor()
         cursor.execute(
             "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual, moneda) VALUES (?,?,?,?,?,?,?,0,?)",
-            (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), f, int(d['categoria_id']), rec_id, moneda)
+            (datos['descripcion'], float(datos['monto_total']), float(datos['monto_cuota']), int(datos['total_cuotas']), f, int(datos['categoria_id']), rec_id, moneda)
         )
         db.commit()
         return jsonify({ "mensaje": "Plan guardado" }), 201
@@ -450,10 +453,13 @@ def get_cuotas_status():
         db = get_db()
         cursor = db.cursor()
         # Agregamos p.recurrente_id a la consulta
+        # y un campo para saber si está asociado a una tarjeta.
         cursor.execute("""
-            SELECT p.*, c.nombre AS categoria_nombre,
+            SELECT p.id, p.descripcion, p.monto_total, p.monto_cuota, p.total_cuotas, p.cuota_actual, strftime('%Y-%m-%d', p.fecha_inicio) as fecha_inicio, p.categoria_id, p.ultimo_pago_mes, p.ultimo_pago_anio, p.recurrente_id, p.moneda, c.nombre AS categoria_nombre, r.descripcion AS tarjeta_nombre,
             CASE WHEN p.ultimo_pago_anio = ? AND p.ultimo_pago_mes = ? THEN 'Pagado este mes' ELSE 'Pendiente este mes' END as status_mes
-            FROM planes_cuotas p JOIN categorias c ON p.categoria_id = c.id
+            FROM planes_cuotas p 
+            JOIN categorias c ON p.categoria_id = c.id
+            LEFT JOIN gastos_recurrentes r ON p.recurrente_id = r.id
             WHERE p.cuota_actual < p.total_cuotas ORDER BY p.id ASC
         """, (hoy.year, hoy.month))
         return jsonify([dict(f) for f in cursor.fetchall()]), 200
@@ -507,7 +513,7 @@ def eliminar_cuota(id):
 def editar_plan_cuota(id):
     try:
         d = request.get_json()
-        f = date.fromisoformat(d['fecha_inicio'])
+        f = date.fromisoformat(d['fecha_inicio'].split('T')[0]) # Tomamos solo la parte de la fecha
         rec_id = int(d['recurrente_id']) if d.get('recurrente_id') else None 
         moneda = d.get('moneda', 'ARS')
 
@@ -663,8 +669,8 @@ def webauthn_register_begin():
     options = generate_registration_options(
         rp_id=RP_ID,
         rp_name=RP_NAME,
-        user_id="master_user", # ID de usuario fijo para esta app
-        user_name="Usuario Principal",
+        user_id=b"master_user", # ID de usuario fijo para esta app (debe ser bytes)
+        user_name="Usuario Principal", # Este puede ser un string
         exclude_credentials=[{"id": cred_id, "type": "public-key"} for cred_id in existing_credentials]
     )
     session['webauthn_challenge'] = options['challenge']

@@ -259,7 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const estilo = p.status_mes.includes('Pagado') ? 'color: green;' : 'color: orange;';
         const mon = p.moneda || 'ARS';
         let btn = '';
-        if (p.status_mes.includes('Pendiente')) {
+        // Si la cuota está asociada a una tarjeta, no se puede pagar individualmente.
+        if (p.recurrente_id && p.tarjeta_nombre) {
+            btn = `<span style="font-size: 0.85em; color: #8e44ad;">Se paga con Resumen ${p.tarjeta_nombre}</span>`;
+        } else if (p.status_mes.includes('Pendiente')) {
             btn = `<button class="btn-pagar-cuota" data-id="${p.id}" data-monto="${p.monto_cuota}" data-moneda="${mon}" data-desc="${p.descripcion}" data-restantes="${p.total_cuotas - p.cuota_actual}">Pagar ${mon}</button>`;
         } else {
             btn = '<span class="text-success">Listo</span>';
@@ -634,8 +637,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             selectCuotaRecurrente.value = ""; // Reseteamos la selección
                             return;
                         }
-                        const nuevaTarjeta = { descripcion: nombreTarjeta, monto_estimado: "0", dia_vencimiento: "1", tipo: 'tarjeta', categoria_id: categoriaId, moneda: 'ARS' };
-                        const d = await apiCall('/api/recurrente', 'POST', nuevaTarjeta);
+                        // FIX: Usamos FormData para enviar los datos, ya que el endpoint lo espera así.
+                        const formData = new FormData();
+                        formData.append('descripcion', nombreTarjeta);
+                        formData.append('monto_estimado', "0");
+                        formData.append('dia_vencimiento', "1");
+                        formData.append('tipo', 'tarjeta');
+                        formData.append('categoria_id', categoriaId);
+                        formData.append('moneda', 'ARS');
+
+                        const d = await apiCall('/api/recurrente', 'POST', formData);
                         await cargarRecurrentesStatus(); // Recarga la lista de tarjetas y actualiza el select
                         selectCuotaRecurrente.value = d.id; // Selecciona la tarjeta recién creada
                     } else {
