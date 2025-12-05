@@ -222,6 +222,30 @@ def get_transacciones():
     except Exception as e:
         return jsonify({ "error": f"Error inesperado: {e}" }), 500
 
+@app.route('/api/transaccion/<int:id>', methods=['DELETE'])
+@login_required
+def eliminar_transaccion(id):
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        # Medida de seguridad: Verificar si la transacción está vinculada a un pago recurrente.
+        # Si lo está, no se debe permitir su eliminación para evitar inconsistencias.
+        cursor.execute("SELECT COUNT(*) FROM pagos_recurrentes_log WHERE transaccion_id = ?", (id,))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({ "error": "No se puede eliminar. Este movimiento está asociado a un pago recurrente o de tarjeta. Elimine el pago desde el panel de recurrentes si es necesario." }), 409 # 409 Conflict
+
+        # Si no está vinculada, proceder con la eliminación.
+        cursor.execute("DELETE FROM transacciones WHERE id = ?", (id,))
+        
+        if cursor.rowcount == 0:
+            return jsonify({ "error": "Movimiento no encontrado." }), 404
+
+        db.commit()
+        return jsonify({ "mensaje": "Movimiento eliminado exitosamente." }), 200
+    except Exception as e:
+        return jsonify({ "error": f"Error inesperado: {e}" }), 500
+
 # --- === API DE RECURRENTES === ---
 @app.route('/api/recurrente', methods=['POST'])
 @login_required

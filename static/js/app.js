@@ -194,6 +194,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const comprobanteBtn = t.comprobante_path 
             ? `<a href="/uploads/${t.comprobante_path}" target="_blank" class="btn-accion" title="Ver Comprobante">📎</a>`
             : '';
+        
+        // Añadimos el botón de eliminar
+        const deleteBtn = `<button class="btn-accion btn-eliminar-transaccion" data-id="${t.id}" title="Eliminar Movimiento">❌</button>`;
 
         return `
             <tr>
@@ -201,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${t.categoria_nombre || 'N/A'}</td> <td>${t.tipo}</td>
                 <td style="color:${color}">${t.tipo === 'gasto' ? '-' : '+'}${formatearMoneda(t.monto, mon)}</td>
                 <td>${comprobanteBtn}</td>
+                <td>${deleteBtn}</td>
             </tr>`;
     }
 
@@ -479,6 +483,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const accionesTransacciones = {
+        'btn-eliminar-transaccion': async (target) => {
+            if (confirm('¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.')) {
+                try {
+                    await apiCall(`/api/transaccion/${target.dataset.id}`, 'DELETE');
+                    mostrarMensaje("Movimiento eliminado.");
+                    refrescarPaneles(); // Refresca todos los paneles para reflejar el cambio
+                } catch (error) { /* El error ya es manejado por apiCall */ }
+            }
+        }
+    };
+
     function manejarClickEnTabla(e, mapaDeAcciones) {
         const target = e.target.closest('button, [class*="btn-"]');
         if (!target) return;
@@ -496,6 +512,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tablaCuotasBody) {
         tablaCuotasBody.addEventListener('click', (e) => manejarClickEnTabla(e, accionesCuotas));
+    }
+
+    if (tablaBody) {
+        tablaBody.addEventListener('click', (e) => manejarClickEnTabla(e, accionesTransacciones));
     }
 
     // --- 7. MODALES (TARJETA Y HISTORIAL) ---
