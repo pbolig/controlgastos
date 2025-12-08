@@ -195,18 +195,16 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `<a href="/uploads/${t.comprobante_path}" target="_blank" class="btn-accion" title="Ver Comprobante">📎</a>`
             : '';
         
-        // Agrupamos todos los botones de acción
+        // Añadimos el botón de eliminar
         const deleteBtn = `<button class="btn-accion btn-eliminar-transaccion" data-id="${t.id}" title="Eliminar Movimiento">❌</button>`;
-        const acciones = `${comprobanteBtn} ${deleteBtn}`;
 
         return `
             <tr>
-                <td>${f[2]}/${f[1]}/${f[0]}</td>
-                <td>${t.descripcion}</td>
-                <td>${acciones}</td>
-                <td>${t.tipo}</td>
+                <td>${f[2]}/${f[1]}/${f[0]}</td> <td>${t.descripcion}</td>
+                <td>${t.categoria_nombre || 'N/A'}</td> <td>${t.tipo}</td>
                 <td style="color:${color}">${t.tipo === 'gasto' ? '-' : '+'}${formatearMoneda(t.monto, mon)}</td>
-                <td>${t.categoria_nombre || 'N/A'}</td>
+                <td>${comprobanteBtn}</td>
+                <td>${deleteBtn}</td>
             </tr>`;
     }
 
@@ -248,16 +246,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return `
             <tr>
-                <td>
                 <td>${r.descripcion} ${obsIcon} ${histIcon}</td>
-                <td class="acciones-columna">
+                <td>${r.categoria_nombre}</td>
+                <td>Día ${r.dia_vencimiento}</td>
+                <td>${formatearMoneda(r.monto_estimado, mon)}</td>
+                <td style="${estadoEstilo}">${r.status}</td>
+                <td>
                     ${btn}
                     <button class="btn-accion btn-editar-recurrente" data-json="${jsonData}">✏️</button>
                     <button class="btn-accion btn-eliminar-recurrente" data-id="${r.id}" data-desc="${r.descripcion}">❌</button>
                 </td>
-                <td>Día ${r.dia_vencimiento}</td>
-                <td>${formatearMoneda(r.monto_estimado, mon)}</td>
-                <td style="${estadoEstilo}">${r.status}</td>
             </tr>`;
     }
 
@@ -276,15 +274,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const jsonData = JSON.stringify(p).replace(/"/g, '&quot;');
         return `
             <tr>
-                <td>${p.descripcion}</td>
-                <td class="acciones-columna">
-                    ${btn} 
-                    <button class="btn-accion btn-editar-cuota" data-json="${jsonData}">✏️</button> 
-                    <button class="btn-accion btn-eliminar-cuota" data-id="${p.id}">❌</button>
-                </td>
+                <td>${p.descripcion}</td> <td>${p.categoria_nombre}</td>
                 <td>${p.cuota_actual}/${p.total_cuotas}</td>
                 <td>${formatearMoneda(p.monto_cuota, mon)}</td>
                 <td style="${estilo}">${p.status_mes}</td>
+                <td>${btn} <button class="btn-accion btn-editar-cuota" data-json="${jsonData}">✏️</button> <button class="btn-accion btn-eliminar-cuota" data-id="${p.id}">❌</button></td>
             </tr>`;
     }
 
