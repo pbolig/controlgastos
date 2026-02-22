@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for, send_from_directory
 import uuid
@@ -20,7 +21,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 
 # --- VERSIÓN DE LA APP ---
-APP_VERSION = "v2.0.0"
+APP_VERSION = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).strftime("%Y%m%d%H%M%S")
 
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'

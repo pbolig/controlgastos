@@ -7,7 +7,8 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f4f7fa; /* Fondo gris claro */
+    background-color: #f4f7fa;
+    /* Fondo gris claro */
     color: #333;
     line-height: 1.6;
 }
@@ -17,17 +18,94 @@ body {
     margin: 20px auto;
     padding: 0 20px;
     display: grid;
-    gap: 25px; /* Espacio entre todas las secciones */
+    gap: 25px;
+    /* Espacio entre todas las secciones */
 }
 
 header {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+    gap: 20px;
 }
 
+.header-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Botones de Cabecera Personalizados */
+.btn-top {
+    font-family: inherit;
+    font-size: 0.9em;
+    font-weight: 500;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    color: white;
+    transition: background-color 0.2s, transform 0.1s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+}
+
+.btn-top:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-top:active {
+    transform: scale(0.95);
+}
+
+/* Colores Específicos */
+.btn-top.reportes {
+    background-color: #8e44ad;
+}
+
+.btn-top.reportes:hover {
+    background-color: #9b59b6;
+}
+
+.btn-top.huella {
+    background-color: #2c3e50;
+}
+
+.btn-top.huella:hover {
+    background-color: #34495e;
+}
+
+.btn-top.salir {
+    background-color: #378881;
+}
+
+.btn-top.salir:hover {
+    background-color: #45a098;
+}
+
+
 h1 {
+    margin: 0;
+    font-size: 2.2em;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    text-align: center;
     color: #2c3e50;
+    /* Fallback */
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0px 2px 5px rgba(0, 0, 0, 0.08);
+    /* Sombra suave */
 }
 
 h2 {
@@ -64,7 +142,8 @@ h2 {
     border-radius: 8px;
     padding: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    border-left: 5px solid; /* Borde de color */
+    border-left: 5px solid;
+    /* Borde de color */
 }
 
 .summary-card h3 {
@@ -81,17 +160,37 @@ h2 {
 }
 
 /* Colores de borde y texto para las tarjetas */
-#summary-ingresos { border-color: #2ecc71; }
-#summary-ingresos p { color: #2ecc71; }
+#summary-ingresos {
+    border-color: #2ecc71;
+}
 
-#summary-gastos { border-color: #e74c3c; }
-#summary-gastos p { color: #e74c3c; }
+#summary-ingresos p {
+    color: #2ecc71;
+}
 
-#summary-pendiente { border-color: #f39c12; }
-#summary-pendiente p { color: #f39c12; }
+#summary-gastos {
+    border-color: #e74c3c;
+}
 
-#summary-saldo { border-color: #3498db; }
-#summary-saldo p { color: #3498db; }
+#summary-gastos p {
+    color: #e74c3c;
+}
+
+#summary-pendiente {
+    border-color: #f39c12;
+}
+
+#summary-pendiente p {
+    color: #f39c12;
+}
+
+#summary-saldo {
+    border-color: #3498db;
+}
+
+#summary-saldo p {
+    color: #3498db;
+}
 
 
 /* === 2. CONTENEDOR DE FORMULARIOS === */
@@ -116,7 +215,8 @@ h2 {
 .form-card form input[type="number"],
 .form-card form input[type="date"],
 .form-card form select,
-.form-card form textarea { /* <-- ESTA ES LA LÍNEA QUE AÑADIMOS */
+.form-card form textarea {
+    /* <-- ESTA ES LA LÍNEA QUE AÑADIMOS */
     width: 100%;
     padding: 10px;
     border: 1px solid #ddd;
@@ -141,7 +241,7 @@ h2 {
 /* === 3. CONTENEDOR DE DASHBOARDS (Tablas) === */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1fr; 
+    grid-template-columns: 1fr;
     gap: 25px;
 }
 
@@ -174,7 +274,8 @@ table tbody tr:last-child td {
 }
 
 /* === BOTONES (Genérico) === */
-button, .btn-pagar {
+button,
+.btn-pagar {
     font-family: inherit;
     font-size: 1em;
     font-weight: 500;
@@ -191,9 +292,11 @@ button, .btn-pagar {
     color: white;
     width: 100%;
 }
+
 .btn-primary:hover {
     background-color: #2980b9;
 }
+
 .btn-primary:active {
     transform: scale(0.98);
 }
@@ -205,6 +308,7 @@ button, .btn-pagar {
     font-size: 0.9em;
     padding: 8px 12px;
 }
+
 .btn-pagar:hover {
     background-color: #27ae60;
 }
@@ -215,22 +319,32 @@ button, .btn-pagar {
     font-size: 0.9em;
     padding: 8px 12px;
 }
+
 .btn-pagar-cuota:hover {
     background-color: #e67e22;
 }
 
 
 /* === ESTADOS DE TEXTO === */
-.text-success { color: #2ecc71; }
-.text-danger { color: #e74c3c; }
-.text-warning { color: #f39c12; }
+.text-success {
+    color: #2ecc71;
+}
+
+.text-danger {
+    color: #e74c3c;
+}
+
+.text-warning {
+    color: #f39c12;
+}
 
 /* === RESPONSIVE === */
 
 /* Tablets y móviles grandes */
 @media (max-width: 992px) {
     .dashboard-grid {
-        grid-template-columns: 1fr; /* Tablas una encima de otra */
+        grid-template-columns: 1fr;
+        /* Tablas una encima de otra */
     }
 }
 
@@ -239,24 +353,32 @@ button, .btn-pagar {
     body {
         padding: 0;
     }
+
     .container {
         margin: 0;
         padding: 10px;
         gap: 20px;
     }
+
     #dashboard-summary {
-        grid-template-columns: 1fr 1fr; /* 2 tarjetas por fila */
+        grid-template-columns: 1fr 1fr;
+        /* 2 tarjetas por fila */
     }
+
     .form-container {
-        grid-template-columns: 1fr; /* Formularios uno encima de otro */
+        grid-template-columns: 1fr;
+        /* Formularios uno encima de otro */
     }
+
     h1 {
         font-size: 1.5em;
     }
+
     /* Reducir texto en móviles para que quepa */
     .summary-card p {
         font-size: 1.4em;
     }
+
     /* Ocultar cabeceras de tabla si se vuelve muy denso */
     /* (Por ahora lo dejamos visible) */
 }
@@ -267,8 +389,10 @@ button, .btn-pagar {
     gap: 10px;
     margin-top: 10px;
 }
+
 .form-buttons button {
-    flex: 1; /* Ocupan el espacio disponible */
+    flex: 1;
+    /* Ocupan el espacio disponible */
 }
 
 /* Botón Secundario (Gris para Cancelar) */
@@ -276,6 +400,7 @@ button, .btn-pagar {
     background-color: #95a5a6;
     color: white;
 }
+
 .btn-secondary:hover {
     background-color: #7f8c8d;
 }
@@ -291,16 +416,27 @@ button, .btn-pagar {
     background: none;
     transition: background-color 0.2s, transform 0.1s;
 }
+
 .btn-accion:hover {
     transform: scale(1.1);
 }
 
 /* Botones de acción específicos */
-.btn-editar-recurrente { color: #3498db; }
-.btn-editar-recurrente:hover { background-color: #ecf0f1; }
+.btn-editar-recurrente {
+    color: #3498db;
+}
 
-.btn-eliminar-recurrente { color: #e74c3c; }
-.btn-eliminar-recurrente:hover { background-color: #ecf0f1; }
+.btn-editar-recurrente:hover {
+    background-color: #ecf0f1;
+}
+
+.btn-eliminar-recurrente {
+    color: #e74c3c;
+}
+
+.btn-eliminar-recurrente:hover {
+    background-color: #ecf0f1;
+}
 
 /* Ocultar el botón de cancelar por defecto */
 #btn-cancelar-edicion {
@@ -308,34 +444,51 @@ button, .btn-pagar {
 }
 
 /* Botones de acción específicos para Cuotas */
-.btn-editar-cuota { color: #3498db; }
-.btn-editar-cuota:hover { background-color: #ecf0f1; }
+.btn-editar-cuota {
+    color: #3498db;
+}
 
-.btn-eliminar-cuota { color: #e74c3c; }
-.btn-eliminar-cuota:hover { background-color: #ecf0f1; }
+.btn-editar-cuota:hover {
+    background-color: #ecf0f1;
+}
+
+.btn-eliminar-cuota {
+    color: #e74c3c;
+}
+
+.btn-eliminar-cuota:hover {
+    background-color: #ecf0f1;
+}
 
 /* 2. Ajustes para pantallas pequeñas (Móviles) */
 @media (max-width: 600px) {
     .container {
-        padding: 10px; /* Menos margen para aprovechar pantalla */
+        padding: 10px;
+        /* Menos margen para aprovechar pantalla */
     }
-    
+
     header {
-        flex-direction: column; /* Título arriba, botón salir abajo */
+        flex-direction: column;
+        /* Título arriba, botón salir abajo */
         align-items: flex-start;
         gap: 10px;
     }
-    
+
     header div {
         width: 100%;
         justify-content: space-between;
     }
 
     /* Hacer los inputs y botones más grandes para dedos */
-    input, select, button, .btn-pagar, .btn-accion {
-        min-height: 44px; /* Tamaño mínimo recomendado por Apple/Google */
+    input,
+    select,
+    button,
+    .btn-pagar,
+    .btn-accion {
+        min-height: 44px;
+        /* Tamaño mínimo recomendado por Apple/Google */
     }
-    
+
     /* Ocultar columnas menos importantes en móvil si quisieras (Opcional) */
     /* #tabla-transacciones th:nth-child(3), 
        #tabla-transacciones td:nth-child(3) { display: none; } */
@@ -351,6 +504,7 @@ button, .btn-pagar {
     border-radius: 5px;
     cursor: pointer;
 }
+
 .btn-cobrar:hover {
     background-color: #27ae60;
 }
@@ -364,11 +518,13 @@ button, .btn-pagar {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5); /* Negro semitransparente */
+    background-color: rgba(0, 0, 0, 0.5);
+    /* Negro semitransparente */
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000; /* Muy por encima de todo */
+    z-index: 10000;
+    /* Muy por encima de todo */
     opacity: 0;
     transition: opacity 0.2s ease;
 }
@@ -403,7 +559,8 @@ button, .btn-pagar {
 
 /* Ajuste para los botones dentro del modal */
 .confirm-actions button {
-    flex: 1; /* Que ocupen el mismo ancho */
+    flex: 1;
+    /* Que ocupen el mismo ancho */
     padding: 10px 20px;
 }
 
@@ -412,6 +569,7 @@ button, .btn-pagar {
     background-color: #95a5a6;
     color: white;
 }
+
 .confirm-actions .btn-secondary:hover {
     background-color: #7f8c8d;
 }
