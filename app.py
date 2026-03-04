@@ -1,4 +1,5 @@
-import psycopg2\nfrom psycopg2.extras import RealDictCursor
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
