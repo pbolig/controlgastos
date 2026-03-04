@@ -196,7 +196,7 @@ def agregar_transaccion():
         db = get_db()
         cursor = db.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
-            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int, moneda, comprobante_path)
         )
         db.commit()
@@ -263,7 +263,7 @@ def agregar_recurrente():
         db = get_db()
         cursor = db.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
-            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo, moneda) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo, moneda) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (datos['descripcion'], float(datos['monto_estimado']), int(datos['dia_vencimiento']), int(datos['categoria_id']), datos.get('observacion'), tipo, moneda)
         )
         db.commit()
@@ -299,7 +299,7 @@ def editar_recurrente(id):
         db = get_db()
         cursor = db.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
-            "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=?, tipo=?, moneda=? WHERE id=?",
+            "UPDATE gastos_recurrentes SET descripcion=%s, monto_estimado=%s, dia_vencimiento=%s, categoria_id=%s, observacion=%s, tipo=%s, moneda=%s WHERE id=%s",
             (d['descripcion'], float(d['monto_estimado']), int(d['dia_vencimiento']), int(d['categoria_id']), d.get('observacion'), tipo, moneda, id)
         )
         db.commit()
@@ -344,7 +344,7 @@ def omitir_recurrente():
         with db:
             # Insertamos en el log pero con transaccion_id NULL (o None en Python)
             cursor.execute(
-                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
+                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (%s, %s, %s, %s)",
                 (recurrente_id, None, hoy.month, hoy.year)
             )
         return jsonify({ "mensaje": "Gasto omitido por este mes." }), 201
@@ -463,7 +463,7 @@ def agregar_plan_cuota():
         db = get_db()
         cursor = db.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
-            "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual, moneda) VALUES (?,?,?,?,?,?,?,0,?)",
+            "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual, moneda) VALUES (%s,%s,%s,%s,%s,%s,%s,0,%s)",
             (datos['descripcion'], float(datos['monto_total']), float(datos['monto_cuota']), int(datos['total_cuotas']), f, int(datos['categoria_id']), rec_id, moneda)
         )
         db.commit()
@@ -514,7 +514,7 @@ def pagar_cuota():
             desc = f"Pago Cuota(s) ({plan['cuota_actual']+1} a {plan['cuota_actual']+cant}/{plan['total_cuotas']}): {plan['descripcion']}"
             if cant == 1: desc = f"Pago Cuota ({plan['cuota_actual']+1}/{plan['total_cuotas']}): {plan['descripcion']}"
             
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, 'gasto', ?, ?, ?, ?)",
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, 'gasto', %s, %s, %s, %s) RETURNING id",
                            (desc, monto_total, hoy, plan['categoria_id'], plan['moneda'], comprobante_path))
             new_id = cursor.fetchone()['id']
             cursor.execute("UPDATE planes_cuotas SET cuota_actual=%s, ultimo_pago_mes=%s, ultimo_pago_anio=%s WHERE id=%s",
@@ -544,7 +544,7 @@ def editar_plan_cuota(id):
 
         db = get_db()
         db.execute(
-            "UPDATE planes_cuotas SET descripcion=?, monto_total=?, monto_cuota=?, total_cuotas=?, categoria_id=?, fecha_inicio=?, recurrente_id=?, moneda=? WHERE id=?",
+            "UPDATE planes_cuotas SET descripcion=%s, monto_total=%s, monto_cuota=%s, total_cuotas=%s, categoria_id=%s, fecha_inicio=%s, recurrente_id=%s, moneda=%s WHERE id=%s",
             (d['descripcion'], float(d['monto_total']), float(d['monto_cuota']), int(d['total_cuotas']), int(d['categoria_id']), f, rec_id, moneda, id)
         )
         db.commit()
@@ -571,23 +571,23 @@ def filtrar_reportes():
         params = []
 
         if data.get('fecha_desde'):
-            query += " AND t.fecha >= ?"
+            query += " AND t.fecha >= %s"
             params.append(data['fecha_desde'])
         
         if data.get('fecha_hasta'):
-            query += " AND t.fecha <= ?"
+            query += " AND t.fecha <= %s"
             params.append(data['fecha_hasta'])
             
         if data.get('tipo') and data['tipo'] != 'todos':
-            query += " AND t.tipo = ?"
+            query += " AND t.tipo = %s"
             params.append(data['tipo'])
 
         if data.get('categoria_id'):
-            query += " AND t.categoria_id = ?"
+            query += " AND t.categoria_id = %s"
             params.append(int(data['categoria_id']))
             
         if data.get('moneda') and data['moneda'] != 'todas':
-            query += " AND t.moneda = ?"
+            query += " AND t.moneda = %s"
             params.append(data['moneda'])
 
         query += " ORDER BY t.fecha DESC"
@@ -658,14 +658,14 @@ def pagar_resumen_tarjeta():
 
             # 4. Insertar la transacción ÚNICA por el total
             cursor.execute(
-                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, 'gasto', ?, ?, ?, ?)",
+                "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, 'gasto', %s, %s, %s, %s) RETURNING id",
                 (desc, monto_pagado, hoy, tarjeta['categoria_id'], moneda_pago, comprobante_path)
             )
             transaccion_id = cursor.fetchone()['id']
 
             # 5. Marcar el recurrente como pagado este mes
             cursor.execute(
-                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
+                "INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (%s, %s, %s, %s)",
                 (recurrente_id, transaccion_id, hoy.month, hoy.year)
             )
 
@@ -719,7 +719,7 @@ def webauthn_register_complete():
         db = get_db()
         cursor = db.cursor(cursor_factory=RealDictCursor)
         cursor.execute(
-            "INSERT INTO webauthn_credentials (credential_id, public_key, sign_count) VALUES (?, ?, ?)",
+            "INSERT INTO webauthn_credentials (credential_id, public_key, sign_count) VALUES (%s, %s, %s)",
             (verification.credential_id, verification.credential_public_key, verification.sign_count)
         )
         db.commit()
