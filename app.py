@@ -210,7 +210,7 @@ def get_transacciones():
         # Formateamos fecha a YYYY-MM-DD para el frontend
         # Añadimos la columna comprobante_path a la consulta
         cursor.execute("""
-            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) AS fecha, c.nombre AS categoria_nombre, t.comprobante_path
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, TO_CHAR(t.fecha, 'YYYY-MM-DD') AS fecha, c.nombre AS categoria_nombre, t.comprobante_path
             FROM transacciones AS t 
             LEFT JOIN categorias AS c ON t.categoria_id = c.id
             ORDER BY t.fecha DESC, t.id DESC
@@ -425,7 +425,7 @@ def get_dashboard_summary():
             cursor = db.cursor(cursor_factory=RealDictCursor)
             
             # Ingresos y Gastos del mes
-            cursor.execute("SELECT tipo, COALESCE(SUM(monto), 0) as total FROM transacciones WHERE strftime('%Y-%m', fecha)=? AND moneda=? GROUP BY tipo", (mes_formato, moneda))
+            cursor.execute("SELECT tipo, COALESCE(SUM(monto), 0) as total FROM transacciones WHERE TO_CHAR(fecha, 'YYYY-MM')=%s AND moneda=%s GROUP BY tipo", (mes_formato, moneda))
             for row in cursor.fetchall():
                 if row['tipo'] == 'ingreso':
                     summary[moneda]['ingresos'] = row['total']
@@ -477,7 +477,7 @@ def get_cuotas_status():
         # Agregamos p.recurrente_id a la consulta
         # y un campo para saber si está asociado a una tarjeta.
         cursor.execute("""
-            SELECT p.id, p.descripcion, p.monto_total, p.monto_cuota, p.total_cuotas, p.cuota_actual, strftime('%Y-%m-%d', p.fecha_inicio) as fecha_inicio, p.categoria_id, p.ultimo_pago_mes, p.ultimo_pago_anio, p.recurrente_id, p.moneda, c.nombre AS categoria_nombre, r.descripcion AS tarjeta_nombre,
+            SELECT p.id, p.descripcion, p.monto_total, p.monto_cuota, p.total_cuotas, p.cuota_actual, TO_CHAR(p.fecha_inicio, 'YYYY-MM-DD') as fecha_inicio, p.categoria_id, p.ultimo_pago_mes, p.ultimo_pago_anio, p.recurrente_id, p.moneda, c.nombre AS categoria_nombre, r.descripcion AS tarjeta_nombre,
             CASE WHEN p.ultimo_pago_anio = %s AND p.ultimo_pago_mes = %s THEN 'Pagado este mes' ELSE 'Pendiente este mes' END as status_mes
             FROM planes_cuotas p 
             JOIN categorias c ON p.categoria_id = c.id
@@ -560,7 +560,7 @@ def filtrar_reportes():
         data = request.get_json()
         # ¡AQUÍ ESTABA EL ERROR! Ahora usamos strftime para que el JS reciba la fecha limpia
         query = """
-            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, strftime('%Y-%m-%d', t.fecha) as fecha, c.nombre AS categoria_nombre, t.comprobante_path
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, TO_CHAR(t.fecha, 'YYYY-MM-DD') as fecha, c.nombre AS categoria_nombre, t.comprobante_path
             FROM transacciones t
             LEFT JOIN categorias c ON t.categoria_id = c.id
             WHERE 1=1
