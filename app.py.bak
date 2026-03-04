@@ -1,4 +1,4 @@
-import psycopg2\nfrom psycopg2.extras import RealDictCursor
+import sqlite3
 import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 
 # --- Configuración de la Aplicación Flask ---
 app = Flask(__name__)
-app.config['SUPABASE_URL'] = os.environ.get('SUPABASE_URL', 'postgresql://postgres:9LGOLc9kNBVG5K0D@db.qnwbnuysfiihzsozallu.supabase.co:5432/postgres')
+app.config['DATABASE'] = os.path.join(app.instance_path, 'gastos.db')
 
 # --- Configuración para Subida de Archivos ---
 UPLOAD_FOLDER = 'uploads'
@@ -53,7 +53,11 @@ def login_required(f):
 # --- Helper para la Base de Datos ---
 def get_db():
     if 'db' not in g:
-        g.db = psycopg2.connect(app.config['SUPABASE_URL'])
+        g.db = sqlite3.connect(
+            app.config['DATABASE'],
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        g.db.row_factory = sqlite3.Row
     return g.db
 
 @app.teardown_appcontext
@@ -139,11 +143,11 @@ def api_test():
 def get_categorias():
     try:
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute("SELECT id, nombre FROM categorias ORDER BY nombre ASC")
         categorias = [dict(fila) for fila in cursor.fetchall()]
         return jsonify(categorias), 200
-    except psycopg2.Error as e:
+    except sqlite3.Error as e:
         return jsonify({ "error": f"Error de base de datos: {e}" }), 500
 
 @app.route('/api/categoria', methods=['POST'])
@@ -156,13 +160,13 @@ def agregar_categoria():
             return jsonify({"error": "El nombre de la categoría no puede estar vacío."}), 400
         
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("INSERT INTO categorias (nombre) VALUES (%s) RETURNING id", (nombre.strip(),))
+        cursor = db.cursor()
+        cursor.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre.strip(),))
         db.commit()
         
-        new_id = cursor.fetchone()['id']
+        new_id = cursor.lastrowid
         return jsonify({"mensaje": "Categoría creada exitosamente", "id": new_id, "nombre": nombre.strip()}), 201
-    except psycopg2.IntegrityError:
+    except sqlite3.IntegrityError:
         return jsonify({"error": "Esa categoría ya existe."}), 409
     except Exception as e: return jsonify({"error": str(e)}), 500
 
@@ -190,13 +194,13 @@ def agregar_transaccion():
         categoria_id_int = int(categoria_id) if categoria_id else None
 
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(
             "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (descripcion, monto_float, tipo, fecha_hoy, categoria_id_int, moneda, comprobante_path)
         )
         db.commit()
-        return jsonify({ "mensaje": "Transacción agregada exitosamente", "id": cursor.fetchone()['id'] }), 201
+        return jsonify({ "mensaje": "Transacción agregada exitosamente", "id": cursor.lastrowid }), 201
     except Exception as e:
         return jsonify({ "error": f"Error inesperado: {e}" }), 500
 
@@ -205,7 +209,7 @@ def agregar_transaccion():
 def get_transacciones():
     try:
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         # Formateamos fecha a YYYY-MM-DD para el frontend
         # Añadimos la columna comprobante_path a la consulta
         cursor.execute("""
@@ -224,16 +228,16 @@ def get_transacciones():
 def eliminar_transaccion(id):
     try:
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
 
         # Medida de seguridad: Verificar si la transacción está vinculada a un pago recurrente.
         # Si lo está, no se debe permitir su eliminación para evitar inconsistencias.
-        cursor.execute("SELECT COUNT(*) FROM pagos_recurrentes_log WHERE transaccion_id = %s", (id,))
+        cursor.execute("SELECT COUNT(*) FROM pagos_recurrentes_log WHERE transaccion_id = ?", (id,))
         if cursor.fetchone()[0] > 0:
             return jsonify({ "error": "No se puede eliminar. Este movimiento está asociado a un pago recurrente o de tarjeta. Elimine el pago desde el panel de recurrentes si es necesario." }), 409 # 409 Conflict
 
         # Si no está vinculada, proceder con la eliminación.
-        cursor.execute("DELETE FROM transacciones WHERE id = %s", (id,))
+        cursor.execute("DELETE FROM transacciones WHERE id = ?", (id,))
         
         if cursor.rowcount == 0:
             return jsonify({ "error": "Movimiento no encontrado." }), 404
@@ -257,13 +261,13 @@ def agregar_recurrente():
             return jsonify({ "error": "Faltan campos obligatorios." }), 400
         
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(
             "INSERT INTO gastos_recurrentes (descripcion, monto_estimado, dia_vencimiento, categoria_id, observacion, tipo, moneda) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (datos['descripcion'], float(datos['monto_estimado']), int(datos['dia_vencimiento']), int(datos['categoria_id']), datos.get('observacion'), tipo, moneda)
         )
         db.commit()
-        return jsonify({ "mensaje": "Movimiento recurrente guardado", "id": cursor.fetchone()['id'] }), 201
+        return jsonify({ "mensaje": "Movimiento recurrente guardado", "id": cursor.lastrowid }), 201
     except Exception as e:
         return jsonify({ "error": f"Error: {e}" }), 500
 
@@ -274,9 +278,9 @@ def eliminar_recurrente(id):
         db = get_db()
         with db:
             # Primero borramos el historial de pagos de este recurrente
-            db.execute("DELETE FROM pagos_recurrentes_log WHERE recurrente_id=%s", (id,))
+            db.execute("DELETE FROM pagos_recurrentes_log WHERE recurrente_id=?", (id,))
             # Luego borramos el recurrente en sí
-            cursor = db.execute("DELETE FROM gastos_recurrentes WHERE id=%s", (id,))
+            cursor = db.execute("DELETE FROM gastos_recurrentes WHERE id=?", (id,))
             
             if cursor.rowcount == 0:
                 return jsonify({ "error": "No encontrado" }), 404
@@ -293,7 +297,7 @@ def editar_recurrente(id):
         tipo = d.get('tipo', 'gasto')
         moneda = d.get('moneda', 'ARS')
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(
             "UPDATE gastos_recurrentes SET descripcion=?, monto_estimado=?, dia_vencimiento=?, categoria_id=?, observacion=?, tipo=?, moneda=? WHERE id=?",
             (d['descripcion'], float(d['monto_estimado']), int(d['dia_vencimiento']), int(d['categoria_id']), d.get('observacion'), tipo, moneda, id)
@@ -309,7 +313,7 @@ def get_recurrentes_status():
     try:
         hoy = date.today()
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute("""
             SELECT r.id, r.descripcion, r.monto_estimado, r.dia_vencimiento, r.observacion, r.tipo, r.moneda,
             c.nombre AS categoria_nombre, c.id AS categoria_id,
@@ -320,7 +324,7 @@ def get_recurrentes_status():
             END AS status
             FROM gastos_recurrentes AS r 
             JOIN categorias AS c ON r.categoria_id = c.id
-            LEFT JOIN pagos_recurrentes_log AS l ON r.id = l.recurrente_id AND l.mes = %s AND l.anio = %s
+            LEFT JOIN pagos_recurrentes_log AS l ON r.id = l.recurrente_id AND l.mes = ? AND l.anio = ?
             ORDER BY r.dia_vencimiento ASC
         """, (hoy.month, hoy.year))
         return jsonify([dict(fila) for fila in cursor.fetchall()]), 200
@@ -336,7 +340,7 @@ def omitir_recurrente():
         hoy = date.today()
         
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         with db:
             # Insertamos en el log pero con transaccion_id NULL (o None en Python)
             cursor.execute(
@@ -352,12 +356,12 @@ def historial_recurrente(id):
     """Devuelve los últimos 6 pagos reales de este recurrente"""
     try:
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute("""
             SELECT t.fecha, t.monto, t.descripcion
             FROM pagos_recurrentes_log l
             JOIN transacciones t ON l.transaccion_id = t.id
-            WHERE l.recurrente_id = %s
+            WHERE l.recurrente_id = ?
             ORDER BY t.fecha DESC
             LIMIT 6
         """, (id,))
@@ -382,9 +386,9 @@ def pagar_recurrente():
         db = get_db()
         
         comprobante_path = guardar_comprobante(comprobante_file)
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         with db:
-            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=%s", (datos['recurrente_id'],))
+            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (datos['recurrente_id'],))
             recurrente = cursor.fetchone()
             
             # Usamos el tipo del recurrente (ingreso o gasto)
@@ -395,11 +399,11 @@ def pagar_recurrente():
             desc = f"{accion_txt} recurrente: {recurrente['descripcion']}"
             
             # Insertamos usando el 'tipo_movimiento' correcto (esto arregla la resta/suma)
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
                            (desc, float(datos['monto_pagado']), tipo_movimiento, hoy, recurrente['categoria_id'], recurrente['moneda'], comprobante_path))
             
-            new_id = cursor.fetchone()['id']
-            cursor.execute("INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (%s, %s, %s, %s)",
+            new_id = cursor.lastrowid
+            cursor.execute("INSERT INTO pagos_recurrentes_log (recurrente_id, transaccion_id, mes, anio) VALUES (?, ?, ?, ?)",
                            (datos['recurrente_id'], new_id, hoy.month, hoy.year))
         return jsonify({ "mensaje": "Procesado exitosamente" }), 201
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
@@ -421,7 +425,7 @@ def get_dashboard_summary():
 
         # Calculamos para cada moneda
         for moneda in ['ARS', 'USD']:
-            cursor = db.cursor(cursor_factory=RealDictCursor)
+            cursor = db.cursor()
             
             # Ingresos y Gastos del mes
             cursor.execute("SELECT tipo, COALESCE(SUM(monto), 0) as total FROM transacciones WHERE strftime('%Y-%m', fecha)=? AND moneda=? GROUP BY tipo", (mes_formato, moneda))
@@ -434,7 +438,7 @@ def get_dashboard_summary():
             # Pendientes del mes
             cursor.execute("""
                 SELECT COALESCE(SUM(r.monto_estimado), 0) as total FROM gastos_recurrentes AS r 
-                WHERE r.moneda=%s AND r.id NOT IN (SELECT recurrente_id FROM pagos_recurrentes_log WHERE mes=%s AND anio=%s)
+                WHERE r.moneda=? AND r.id NOT IN (SELECT recurrente_id FROM pagos_recurrentes_log WHERE mes=? AND anio=?)
             """, (moneda, hoy.month, hoy.year))
             summary[moneda]['pendiente'] = cursor.fetchone()['total']
             
@@ -457,7 +461,7 @@ def agregar_plan_cuota():
         moneda = datos.get('moneda', 'ARS')
         
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(
             "INSERT INTO planes_cuotas (descripcion, monto_total, monto_cuota, total_cuotas, fecha_inicio, categoria_id, recurrente_id, cuota_actual, moneda) VALUES (?,?,?,?,?,?,?,0,?)",
             (datos['descripcion'], float(datos['monto_total']), float(datos['monto_cuota']), int(datos['total_cuotas']), f, int(datos['categoria_id']), rec_id, moneda)
@@ -472,12 +476,12 @@ def get_cuotas_status():
     try:
         hoy = date.today()
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         # Agregamos p.recurrente_id a la consulta
         # y un campo para saber si está asociado a una tarjeta.
         cursor.execute("""
             SELECT p.id, p.descripcion, p.monto_total, p.monto_cuota, p.total_cuotas, p.cuota_actual, strftime('%Y-%m-%d', p.fecha_inicio) as fecha_inicio, p.categoria_id, p.ultimo_pago_mes, p.ultimo_pago_anio, p.recurrente_id, p.moneda, c.nombre AS categoria_nombre, r.descripcion AS tarjeta_nombre,
-            CASE WHEN p.ultimo_pago_anio = %s AND p.ultimo_pago_mes = %s THEN 'Pagado este mes' ELSE 'Pendiente este mes' END as status_mes
+            CASE WHEN p.ultimo_pago_anio = ? AND p.ultimo_pago_mes = ? THEN 'Pagado este mes' ELSE 'Pendiente este mes' END as status_mes
             FROM planes_cuotas p 
             JOIN categorias c ON p.categoria_id = c.id
             LEFT JOIN gastos_recurrentes r ON p.recurrente_id = r.id
@@ -497,9 +501,9 @@ def pagar_cuota():
         db = get_db()
 
         comprobante_path = guardar_comprobante(comprobante_file)
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         with db:
-            cursor.execute("SELECT * FROM planes_cuotas WHERE id=%s", (datos['plan_id'],))
+            cursor.execute("SELECT * FROM planes_cuotas WHERE id=?", (datos['plan_id'],))
             plan = cursor.fetchone()
             
             restantes = plan['total_cuotas'] - plan['cuota_actual']
@@ -510,10 +514,10 @@ def pagar_cuota():
             desc = f"Pago Cuota(s) ({plan['cuota_actual']+1} a {plan['cuota_actual']+cant}/{plan['total_cuotas']}): {plan['descripcion']}"
             if cant == 1: desc = f"Pago Cuota ({plan['cuota_actual']+1}/{plan['total_cuotas']}): {plan['descripcion']}"
             
-            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (%s, %s, 'gasto', ?, ?, ?, ?)",
+            cursor.execute("INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, 'gasto', ?, ?, ?, ?)",
                            (desc, monto_total, hoy, plan['categoria_id'], plan['moneda'], comprobante_path))
-            new_id = cursor.fetchone()['id']
-            cursor.execute("UPDATE planes_cuotas SET cuota_actual=%s, ultimo_pago_mes=%s, ultimo_pago_anio=%s WHERE id=%s",
+            new_id = cursor.lastrowid
+            cursor.execute("UPDATE planes_cuotas SET cuota_actual=?, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
                            (plan['cuota_actual']+cant, hoy.month, hoy.year, plan['id']))
         return jsonify({ "mensaje": f"Pagado exitosamente", "transaccion_id": new_id }), 201
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
@@ -523,8 +527,8 @@ def pagar_cuota():
 def eliminar_cuota(id):
     try:
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("DELETE FROM planes_cuotas WHERE id=%s", (id,))
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM planes_cuotas WHERE id=?", (id,))
         db.commit()
         return jsonify({ "mensaje": "Eliminado" }), 200
     except Exception as e: return jsonify({ "error": f"Error: {e}" }), 500
@@ -589,7 +593,7 @@ def filtrar_reportes():
         query += " ORDER BY t.fecha DESC"
 
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(query, params)
         
         return jsonify([dict(f) for f in cursor.fetchall()]), 200
@@ -612,11 +616,11 @@ def pagar_resumen_tarjeta():
         db = get_db()
 
         comprobante_path = guardar_comprobante(comprobante_file)
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
 
         with db:
             # 1. Obtener info del recurrente (La tarjeta en sí)
-            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=%s", (recurrente_id,))
+            cursor.execute("SELECT * FROM gastos_recurrentes WHERE id=?", (recurrente_id,))
             tarjeta = cursor.fetchone()
             if not tarjeta: return jsonify({"error": "Tarjeta no encontrada"}), 404
             
@@ -630,8 +634,8 @@ def pagar_resumen_tarjeta():
             # Buscamos cuotas pendientes de este mes para esta tarjeta y moneda
             cursor.execute("""
                 SELECT * FROM planes_cuotas 
-                WHERE recurrente_id = %s AND moneda = %s AND cuota_actual < total_cuotas
-                AND (ultimo_pago_anio IS NULL OR ultimo_pago_anio < %s OR (ultimo_pago_anio = %s AND ultimo_pago_mes < %s))
+                WHERE recurrente_id = ? AND moneda = ? AND cuota_actual < total_cuotas
+                AND (ultimo_pago_anio IS NULL OR ultimo_pago_anio < ? OR (ultimo_pago_anio = ? AND ultimo_pago_mes < ?))
             """, (recurrente_id, moneda_pago, hoy.year, hoy.year, hoy.month))
             
             cuotas_pendientes = cursor.fetchall()
@@ -657,7 +661,7 @@ def pagar_resumen_tarjeta():
                 "INSERT INTO transacciones (descripcion, monto, tipo, fecha, categoria_id, moneda, comprobante_path) VALUES (?, ?, 'gasto', ?, ?, ?, ?)",
                 (desc, monto_pagado, hoy, tarjeta['categoria_id'], moneda_pago, comprobante_path)
             )
-            transaccion_id = cursor.fetchone()['id']
+            transaccion_id = cursor.lastrowid
 
             # 5. Marcar el recurrente como pagado este mes
             cursor.execute(
@@ -683,7 +687,7 @@ def serve_upload(filepath):
 @login_required # Solo un usuario logueado puede registrar un dispositivo
 def webauthn_register_begin():
     db = get_db()
-    cursor = db.cursor(cursor_factory=RealDictCursor)
+    cursor = db.cursor()
     cursor.execute("SELECT credential_id FROM webauthn_credentials")
     existing_credentials = [row[0] for row in cursor.fetchall()]
 
@@ -713,7 +717,7 @@ def webauthn_register_complete():
         )
 
         db = get_db()
-        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor = db.cursor()
         cursor.execute(
             "INSERT INTO webauthn_credentials (credential_id, public_key, sign_count) VALUES (?, ?, ?)",
             (verification.credential_id, verification.credential_public_key, verification.sign_count)
@@ -726,7 +730,7 @@ def webauthn_register_complete():
 @app.route('/api/webauthn/login-begin', methods=['POST'])
 def webauthn_login_begin():
     db = get_db()
-    cursor = db.cursor(cursor_factory=RealDictCursor)
+    cursor = db.cursor()
     cursor.execute("SELECT credential_id FROM webauthn_credentials")
     existing_credentials = [row[0] for row in cursor.fetchall()]
 
@@ -747,8 +751,8 @@ def webauthn_login_complete():
     credential_id = base64url_to_bytes(body['id'])
 
     db = get_db()
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT * FROM webauthn_credentials WHERE credential_id = %s", (credential_id,))
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM webauthn_credentials WHERE credential_id = ?", (credential_id,))
     credential_data = cursor.fetchone()
 
     if not credential_data:
@@ -769,7 +773,7 @@ def webauthn_login_complete():
         session.permanent = True
         session['logged_in'] = True
         # Actualizamos el contador de firmas para prevenir clonación de credenciales
-        cursor.execute("UPDATE webauthn_credentials SET sign_count = %s WHERE id = %s", (verification.new_sign_count, credential_data['id']))
+        cursor.execute("UPDATE webauthn_credentials SET sign_count = ? WHERE id = ?", (verification.new_sign_count, credential_data['id']))
         db.commit()
         return jsonify({"verified": True})
     except Exception as e:
