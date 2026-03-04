@@ -644,7 +644,7 @@ def pagar_resumen_tarjeta():
                 nombres_planes.append(plan['descripcion'])
                 monto_total_cuotas += plan['monto_cuota']
                 cursor.execute(
-                    "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=?, ultimo_pago_anio=? WHERE id=?",
+                    "UPDATE planes_cuotas SET cuota_actual = cuota_actual + 1, ultimo_pago_mes=%s, ultimo_pago_anio=%s WHERE id=%s",
                     (hoy.month, hoy.year, plan['id'])
                 )
 
