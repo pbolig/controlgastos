@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Formularios
     const formTransaccion = document.getElementById('form-transaccion');
     const formMensaje = document.getElementById('form-mensaje');
-    const selectCategoria = document.getElementById('categoria'); 
+    const selectCategoria = document.getElementById('categoria');
 
     const formRecurrente = document.getElementById('form-recurrente');
     const formRecurrenteTitulo = document.getElementById('form-recurrente-titulo');
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSubmitRecurrente = document.getElementById('btn-submit-recurrente');
     const btnCancelarEdicion = document.getElementById('btn-cancelar-edicion');
     const selectRecurrenteTipo = document.getElementById('recurrente-tipo');
-    
+
     const formCuota = document.getElementById('form-cuota');
     const formCuotaTitulo = document.getElementById('form-cuota-titulo');
     const formCuotaMensaje = document.getElementById('form-cuota-mensaje');
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tbodyHistorial = document.querySelector('#tabla-historial-contenido tbody');
     const loadingHistorial = document.getElementById('historial-loading');
     const btnCerrarHistorial = document.getElementById('btn-cerrar-historial');
-    
+
     // Globales
     let tarjetasDisponibles = [];
 
@@ -71,6 +71,10 @@ document.addEventListener('DOMContentLoaded', () => {
      * @returns {Promise<any>} - La respuesta JSON del servidor.
      */
     async function apiCall(endpoint, method = 'GET', body = null) {
+        // Mostrar spinner
+        const spinner = document.getElementById('global-spinner');
+        if (spinner) spinner.style.display = 'flex';
+
         const isFormData = body instanceof FormData;
         const options = {
             method,
@@ -93,6 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             alert(`Error en la operación: ${error.message}`);
             throw error; // Relanzamos para que el llamador pueda manejarlo si es necesario.
+        } finally {
+            // Ocultar spinner
+            if (spinner) spinner.style.display = 'none';
         }
     }
 
@@ -160,16 +167,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // FIX: La función 'update' se había perdido en la refactorización. La redefinimos aquí.
             function update(card, sel_ars, val_ars, sel_usd, val_usd) {
-                if(card) {
+                if (card) {
                     const el_ars = card.querySelector(sel_ars);
                     const el_usd = card.querySelector(sel_usd);
-                    if(el_ars) {
+                    if (el_ars) {
                         el_ars.textContent = formatearMoneda(val_ars, 'ARS');
-                        if(sel_ars.includes('saldo')) el_ars.style.color = val_ars < 0 ? '#e74c3c' : '#2980b9';
+                        if (sel_ars.includes('saldo')) el_ars.style.color = val_ars < 0 ? '#e74c3c' : '#2980b9';
                     }
-                    if(el_usd) {
+                    if (el_usd) {
                         el_usd.textContent = formatearMoneda(val_usd, 'USD');
-                        if(sel_usd.includes('saldo')) el_usd.style.color = val_usd < 0 ? '#e74c3c' : '#27ae60';
+                        if (sel_usd.includes('saldo')) el_usd.style.color = val_usd < 0 ? '#e74c3c' : '#27ae60';
                     }
                 }
             }
@@ -189,12 +196,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const color = t.tipo === 'gasto' ? 'red' : 'green';
         const f = t.fecha.split('-');
         const mon = t.moneda || 'ARS';
-        
+
         // Añadimos el botón de comprobante si existe la ruta del archivo
-        const comprobanteBtn = t.comprobante_path 
+        const comprobanteBtn = t.comprobante_path
             ? `<a href="/uploads/${t.comprobante_path}" target="_blank" class="btn-accion" title="Ver Comprobante">📎</a>`
             : '';
-        
+
         // Añadimos el botón de eliminar
         const deleteBtn = `<button class="btn-accion btn-eliminar-transaccion" data-id="${t.id}" title="Eliminar Movimiento">❌</button>`;
 
@@ -212,11 +219,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selectCuotaRecurrente) return;
         const valorActual = selectCuotaRecurrente.value;
         // Limpiamos solo las opciones de tarjetas, no la de "Crear Nueva"
-        Array.from(selectCuotaRecurrente.options).forEach(opt => { if(opt.value && opt.value !== 'nueva_tarjeta') opt.remove(); });
+        Array.from(selectCuotaRecurrente.options).forEach(opt => { if (opt.value && opt.value !== 'nueva_tarjeta') opt.remove(); });
         tarjetasDisponibles.forEach(t => {
             selectCuotaRecurrente.appendChild(new Option(t.descripcion + ` (${t.moneda || 'ARS'})`, t.id));
         });
-        if(valorActual) selectCuotaRecurrente.value = valorActual;
+        if (valorActual) selectCuotaRecurrente.value = valorActual;
     }
 
     function crearFilaRecurrente(r) {
@@ -224,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let estadoEstilo = 'color: orange;';
         if (procesado) estadoEstilo = 'color: green;';
         else if (r.status === 'Omitido') estadoEstilo = 'color: gray; font-style: italic;';
-        
+
         const mon = r.moneda || 'ARS';
         let btn = '';
         if (r.status === 'Pendiente') {
@@ -239,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             btn = `<span class="text-success">✔ ${r.status}</span>`;
         }
-        
+
         const obsIcon = (r.observacion && r.observacion.trim()) ? ` <span class="obs-tooltip" title="${r.observacion}">ℹ️</span>` : '';
         const histIcon = `<span class="btn-historial" data-id="${r.id}" style="cursor:pointer; margin-left:5px; font-size:1.1em;" title="Ver historial">🕒</span>`;
         const jsonData = JSON.stringify(r).replace(/"/g, '&quot;');
@@ -302,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Por simplicidad, si es PUT, lo convertimos a JSON (esto no soporta archivos en edición).
             // Si es POST, enviamos FormData tal cual.
             const datos = (method === 'PUT') ? Object.fromEntries(formData.entries()) : formData;
-            
+
             // La función apiCall debe ser modificada para no siempre usar 'application/json'
             // cuando se envía FormData.
 
@@ -323,14 +330,14 @@ document.addEventListener('DOMContentLoaded', () => {
         formRecurrente.dataset.editId = '';
         if (selectRecurrenteCategoria) selectRecurrenteCategoria.value = "";
     }
-    if(btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', resetFormRecurrente);
+    if (btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', resetFormRecurrente);
 
     function resetFormCuota() {
         if (!formCuota) return;
         formCuota.reset();
         formCuotaTitulo.textContent = 'Definir Plan de Cuotas';
         btnSubmitCuota.textContent = 'Guardar Plan';
-        if(btnCancelarEdicionCuota) btnCancelarEdicionCuota.style.display = 'none';
+        if (btnCancelarEdicionCuota) btnCancelarEdicionCuota.style.display = 'none';
         formCuota.dataset.editId = '';
         if (selectCuotaCategoria) selectCuotaCategoria.value = "";
     }
@@ -543,7 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = await apiCall('/api/cuotas/status');
             loadingTarjeta.style.display = 'none'; formPagoTarjeta.style.display = 'block';
-            
+
             const pendientes = data.filter(p => p.status_mes.includes('Pendiente') && p.recurrente_id == idRecurrente);
             let totalCuotas = 0;
 
@@ -558,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     divListaCuotas.appendChild(div);
                 });
             }
-            
+
             spanTotalCuotas.textContent = formatearMoneda(totalCuotas, pendientes[0]?.moneda || 'ARS');
             inputMontoPagado.value = totalCuotas.toFixed(2); // Sugerimos el monto total de cuotas
 
@@ -570,13 +577,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (modalTarjeta) {
-        if(btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200); });
+        if (btnCerrarModalTarjeta) btnCerrarModalTarjeta.addEventListener('click', () => { modalTarjeta.style.opacity = '0'; setTimeout(() => modalTarjeta.style.display = 'none', 200); });
 
         btnConfirmarPagoResumen.addEventListener('click', async () => {
             if (parseFloat(document.getElementById('monto-pagado-resumen').value) < 0) {
                 return alert("El monto pagado debe ser mayor a cero.");
             }
-            
+
             const formData = new FormData(formPagoTarjeta);
             // Añadimos el ID del recurrente y el monto pagado que no están en el form directamente
             formData.append('recurrente_id', document.getElementById('tarjeta-recurrente-id').value);
@@ -585,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const d = await apiCall('/api/tarjeta/pagar-resumen', 'POST', formData);
                     mostrarMensaje(d.mensaje);
-                    modalTarjeta.style.opacity='0'; setTimeout(()=>modalTarjeta.style.display='none',200);
+                    modalTarjeta.style.opacity = '0'; setTimeout(() => modalTarjeta.style.display = 'none', 200);
                     refrescarPaneles();
                 } catch (error) {
                     // El error ya es mostrado por apiCall, aquí no necesitamos hacer nada más.
@@ -596,13 +603,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function abrirModalHistorial(id) {
-        if(!modalHistorial) return;
+        if (!modalHistorial) return;
         modalHistorial.style.display = 'flex'; setTimeout(() => modalHistorial.style.opacity = '1', 10);
         loadingHistorial.style.display = 'block'; tbodyHistorial.innerHTML = '';
 
         fetch(`/api/recurrente/historial/${id}`).then(r => r.json()).then(data => {
             loadingHistorial.style.display = 'none';
-            if(data.length === 0) { tbodyHistorial.innerHTML = '<tr><td colspan="2">Sin movimientos.</td></tr>'; return; }
+            if (data.length === 0) { tbodyHistorial.innerHTML = '<tr><td colspan="2">Sin movimientos.</td></tr>'; return; }
             data.forEach(h => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td style="padding:8px; border-bottom:1px solid #eee;">${h.fecha}</td><td style="padding:8px; border-bottom:1px solid #eee;">${formatearMoneda(h.monto, h.moneda)}</td>`;
@@ -610,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    if(btnCerrarHistorial) btnCerrarHistorial.addEventListener('click', () => { modalHistorial.style.opacity='0'; setTimeout(()=>modalHistorial.style.display='none',200); });
+    if (btnCerrarHistorial) btnCerrarHistorial.addEventListener('click', () => { modalHistorial.style.opacity = '0'; setTimeout(() => modalHistorial.style.display = 'none', 200); });
 
     // --- 8. INICIO Y CONFIGURACIÓN DE EVENTOS ---
 
@@ -621,7 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cargarDashboardSummary();
         cargarCuotasStatus();
     }
-    
+
     async function inicializarApp() {
         await cargarCategorias(); // Esperamos a que las categorías se carguen primero
         refrescarPaneles();

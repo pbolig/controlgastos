@@ -1,28 +1,35 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Gastos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💸</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
 
+<body>
+    <!-- === SPINNER GLOBAL === -->
+    <div id="global-spinner" class="spinner-overlay" style="display: none;">
+        <div class="spinner"></div>
+    </div>
     <div class="container">
         <header>
             <h1>Mi Panel de Gastos</h1>
-            
+
             <div class="header-actions">
                 <a href="/reportes" class="btn-top reportes" title="Ver Reportes y Gráficos">📊 Reportes</a>
-                
+
                 <!-- Botón para registrar dispositivo biométrico -->
                 {% if webauthn_enabled %}
-                <button id="btn-webauthn-register" class="btn-top huella" title="Activar llave de seguridad de Windows/Mac">👆 Activar Biometría</button>
+                <button id="btn-webauthn-register" class="btn-top huella"
+                    title="Activar llave de seguridad de Windows/Mac">👆 Activar Biometría</button>
                 {% endif %}
 
                 <a href="/logout" class="btn-top salir" title="Cerrar la sesión de forma segura">🔒 Salir</a>
@@ -71,7 +78,8 @@
                         <label for="categoria">Categoría:</label>
                         <div style="display: flex; align-items: center; gap: 5px;">
                             <select name="categoria_id" id="categoria" style="flex-grow: 1;"></select>
-                            <button type="button" id="btn-crear-categoria-transaccion" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                            <button type="button" id="btn-crear-categoria-transaccion" class="btn-accion"
+                                title="Crear Nueva Categoría">+</button>
                         </div>
                     </div>
                     <div>
@@ -116,8 +124,10 @@
                     <div>
                         <label for="recurrente-categoria">Categoría:</label>
                         <div style="display: flex; align-items: center; gap: 5px;">
-                            <select id="recurrente-categoria" name="categoria_id" required style="flex-grow: 1;"></select>
-                            <button type="button" id="btn-crear-categoria-recurrente" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                            <select id="recurrente-categoria" name="categoria_id" required
+                                style="flex-grow: 1;"></select>
+                            <button type="button" id="btn-crear-categoria-recurrente" class="btn-accion"
+                                title="Crear Nueva Categoría">+</button>
                         </div>
                     </div>
 
@@ -132,7 +142,7 @@
                         <label for="recurrente-observacion">Observación (Opcional):</label>
                         <textarea id="recurrente-observacion" name="observacion" rows="2"></textarea>
                     </div>
-                    
+
                     <div class="form-buttons">
                         <button type="submit" class="btn-primary" id="btn-submit-recurrente">Guardar Recurrente</button>
                         <button type="button" class="btn-secondary" id="btn-cancelar-edicion">Cancelar</button>
@@ -164,7 +174,8 @@
                         <label for="cuota-recurrente">Tarjeta (Opcional):</label>
                         <select id="cuota-recurrente" name="recurrente_id">
                             <option value="">-- Ninguna (Efectivo/Otro) --</option>
-                            <option value="nueva_tarjeta" style="font-weight: bold; color: #8e44ad;">-- 💳 Crear Nueva Tarjeta --</option>
+                            <option value="nueva_tarjeta" style="font-weight: bold; color: #8e44ad;">-- 💳 Crear Nueva
+                                Tarjeta --</option>
                             <!-- Se llena con JS -->
                         </select>
                     </div>
@@ -173,7 +184,8 @@
                         <label for="cuota-categoria">Categoría:</label>
                         <div style="display: flex; align-items: center; gap: 5px;">
                             <select id="cuota-categoria" name="categoria_id" required style="flex-grow: 1;"></select>
-                            <button type="button" id="btn-crear-categoria-cuota" class="btn-accion" title="Crear Nueva Categoría">+</button>
+                            <button type="button" id="btn-crear-categoria-cuota" class="btn-accion"
+                                title="Crear Nueva Categoría">+</button>
                         </div>
                     </div>
                     <div>
@@ -196,7 +208,7 @@
                 <div id="form-cuota-mensaje"></div>
             </section>
         </div>
-        
+
         <div class="dashboard-grid">
             <section class="widget" id="dashboard-recurrentes">
                 <h2>Gastos Recurrentes del Mes</h2>
@@ -248,22 +260,23 @@
                     </tr>
                 </thead>
                 <tbody id="lista-transacciones-body">
-                    </tbody>
+                </tbody>
             </table>
         </section>
 
-    </div> 
+    </div>
 
     <!-- === MODAL DE PAGO DE TARJETA === -->
     <div id="modal-tarjeta" class="confirm-overlay" style="display: none; opacity: 0;">
         <div class="confirm-dialog" style="max-width: 650px; text-align: left;">
-            <h3 id="modal-tarjeta-titulo" style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Pagar Resumen Tarjeta</h3>
-            
+            <h3 id="modal-tarjeta-titulo" style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                Pagar Resumen Tarjeta</h3>
+
             <div id="modal-tarjeta-loading" style="text-align: center; padding: 20px;">Cargando cuotas...</div>
-            
+
             <form id="form-pago-tarjeta" style="display: none;" onsubmit="return false;">
                 <input type="hidden" id="tarjeta-recurrente-id">
-                
+
                 <h4>Cuotas Incluidas en este Resumen</h4>
                 <div class="lista-cuotas-container" id="lista-cuotas-tarjeta">
                     <!-- JS llenará esta lista -->
@@ -299,7 +312,7 @@
                 Historial (Últimos 6)
             </h3>
             <div id="historial-loading" style="text-align:center; padding:10px;">Cargando...</div>
-            
+
             <table style="width:100%; font-size:0.9em; border-collapse: collapse;" id="tabla-historial-contenido">
                 <thead>
                     <tr style="background:#f9f9f9; text-align:left;">
@@ -325,7 +338,7 @@
             <h3 id="modal-pago-titulo" style="margin-top: 0;">Confirmar Operación</h3>
             <form id="form-pago-generico" onsubmit="return false;">
                 <p id="modal-pago-descripcion" style="margin-bottom: 20px;"></p>
-                
+
                 <div class="form-group" id="cont-monto-real" style="display: none;">
                     <label for="pago-monto-real">Monto Real Pagado:</label>
                     <input type="number" id="pago-monto-real" step="0.01" required>
@@ -354,4 +367,5 @@
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
+
 </html>
