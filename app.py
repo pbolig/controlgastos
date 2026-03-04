@@ -9,8 +9,33 @@ from zoneinfo import ZoneInfo
 from functools import wraps
 from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for, send_from_directory
 import uuid
+import io
 from webauthn import generate_registration_options, verify_registration_response, generate_authentication_options, verify_authentication_response, base64url_to_bytes
 from werkzeug.utils import secure_filename
+from flask import send_file, abort
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
+# --- Inicializar Cliente de Google Drive ---
+def get_drive_service():
+    scopes = ['https://www.googleapis.com/auth/drive']
+    creds_str = os.environ.get('GOOGLE_CREDENTIALS')
+    if creds_str:
+        import json
+        creds_info = json.loads(creds_str)
+        creds = service_account.Credentials.from_service_account_info(creds_info, scopes=scopes)
+    else:
+        creds = service_account.Credentials.from_service_account_file('google_credentials.json', scopes=scopes)
+    return build('drive', 'v3', credentials=creds)
+
+DRIVE_SERVICE = None
+try:
+    DRIVE_SERVICE = get_drive_service()
+    print("Google Drive API inicializada correctamente.")
+except Exception as e:
+    print(f"Advertencia: No se pudo configurar la API de Google Drive: {e}")
 
 # --- Configuración de la Aplicación Flask ---
 app = Flask(__name__)
@@ -94,34 +119,47 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
-# --- Helper para guardar comprobantes ---
 def guardar_comprobante(file_storage):
     """
-    Guarda un archivo de comprobante en una carpeta anual y devuelve la ruta relativa.
+    Guarda un archivo de comprobante en la carpeta correspondiente de Google Drive.
+    Retorna el ID del archivo en Drive (string largo).
     Retorna None si no hay archivo o si ocurre un error.
     """
     if not file_storage or file_storage.filename == '':
         return None
 
     try:
-        # 1. Crear la carpeta del año actual (ej: 'uploads/2024')
-        current_year = str(datetime.now().year)
-        year_folder = os.path.join(app.config['UPLOAD_FOLDER'], current_year)
-        os.makedirs(year_folder, exist_ok=True)
+        drive_folder_id = os.environ.get('DRIVE_FOLDER_ID')
+        if not drive_folder_id or not DRIVE_SERVICE:
+            print("Error: DRIVE_FOLDER_ID no está configurado o el servicio no se inició.")
+            return None
 
-        # 2. Generar un nombre de archivo seguro y único
+        # 1. Generar un nombre de archivo seguro y único
         original_filename = secure_filename(file_storage.filename)
         extension = os.path.splitext(original_filename)[1]
         unique_filename = f"{uuid.uuid4().hex}{extension}"
+
+        # 2. Configurar la metadata y el media para Drive
+        file_metadata = {
+            'name': unique_filename,
+            'parents': [drive_folder_id]
+        }
         
-        # 3. Guardar el archivo
-        save_path = os.path.join(year_folder, unique_filename)
-        file_storage.save(save_path)
+        # Leemos el contenido en memoria para subirlo
+        file_content = file_storage.read()
+        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=file_storage.mimetype, resumable=True)
+
+        # 3. Subir el archivo
+        file = DRIVE_SERVICE.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
         
-        # 4. Devolver la ruta relativa para la base de datos (ej: '2024/nombre_unico.pdf')
-        return os.path.join(current_year, unique_filename).replace('\\', '/')
+        # Devolvemos solo el ID del archivo, esto es lo que se guardará en la base de datos
+        return file.get('id')
     except Exception as e:
-        print(f"Error al guardar el archivo: {e}")
+        print(f"Error al guardar el archivo en Google Drive: {e}")
         return None
 
 # --- Rutas Principales (Frontend y API) ---
@@ -678,8 +716,18 @@ def pagar_resumen_tarjeta():
 @app.route('/uploads/<path:filepath>')
 @login_required
 def serve_upload(filepath):
-    """Sirve un archivo desde la carpeta de uploads de forma segura."""
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
+    """Sirve un archivo desde local o desde Google Drive si es un ID."""
+    if len(filepath) > 20 and '/' not in filepath and DRIVE_SERVICE:
+        try:
+            req_media = DRIVE_SERVICE.files().get_media(fileId=filepath)
+            file_bytes = req_media.execute()
+            file_meta = DRIVE_SERVICE.files().get(fileId=filepath, fields='name, mimeType').execute()
+            return send_file(io.BytesIO(file_bytes), mimetype=file_meta.get('mimeType'), download_name=file_meta.get('name'))
+        except Exception as e:
+            print(f"Error sirviendo desde Drive: {e}")
+            abort(404)
+    else:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
 
 # --- === API DE WEBAUTHN (AUTENTICACIÓN BIOMÉTRICA) === ---
 
