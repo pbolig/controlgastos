@@ -1,6 +1,9 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from functools import wraps
