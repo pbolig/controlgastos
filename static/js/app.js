@@ -773,6 +773,22 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // --- Funcionalidad extra: Auto-Depurar Comprobantes ---
+        const btnDepurar = document.getElementById('btn-depurar');
+        if (btnDepurar) {
+            btnDepurar.addEventListener('click', async () => {
+                if (confirm("¿Estás seguro de que quieres ejecutar la limpieza automática?\n\nEsto descargará a tu carpeta local de respaldos (LOCAL_ARCHIVE_PATH) los comprobantes de gastos de más de 1 año de antigüedad y los borrará de la base de datos en la nube para ahorrar espacio.\n\nEl texto del gasto se mantendrá en tu historial intacto.")) {
+                    try {
+                        // El spinner global ya se activa en apiCall, así que no hace falta mensaje custom bloqueante.
+                        const res = await apiCall('/api/admin/depurar_comprobantes', 'POST');
+                        alert("🧹 " + res.mensaje);
+                    } catch (error) {
+                        alert("Hubo un error en la limpieza: " + error.message);
+                    }
+                }
+            });
+        }
+
         // --- Funcionalidad extra: Cerrar modales con la tecla 'Escape' ---
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {

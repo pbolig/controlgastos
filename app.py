@@ -14,39 +14,32 @@ from webauthn import generate_registration_options, verify_registration_response
 from werkzeug.utils import secure_filename
 from flask import send_file, abort
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+import requests
 
-# --- Inicializar Cliente de Google Drive ---
-def get_drive_service():
-    scopes = ['https://www.googleapis.com/auth/drive']
-    creds_str = os.environ.get('GOOGLE_CREDENTIALS')
-    if creds_str:
-        import json
-        creds_info = json.loads(creds_str)
-        creds = service_account.Credentials.from_service_account_info(creds_info, scopes=scopes)
-    else:
-        creds = service_account.Credentials.from_service_account_file('google_credentials.json', scopes=scopes)
-    return build('drive', 'v3', credentials=creds)
+# --- Inicializar Supabase Storage (REST API) ---
+SUPABASE_PROJECT_URL = os.environ.get("SUPABASE_PROJECT_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+STORAGE_BUCKET = os.environ.get("STORAGE_BUCKET", "comprobantes")
 
-DRIVE_SERVICE = None
-try:
-    DRIVE_SERVICE = get_drive_service()
-    print("Google Drive API inicializada correctamente.")
-except Exception as e:
-    print(f"Advertencia: No se pudo configurar la API de Google Drive: {e}")
+if SUPABASE_PROJECT_URL and SUPABASE_KEY:
+    print("Supabase Storage configurado vía REST API.")
+else:
+    print("Advertencia: Faltan credenciales de Supabase para Storage.")
 
 # --- Configuración de la Aplicación Flask ---
 app = Flask(__name__)
 app.config['SUPABASE_URL'] = os.environ.get('SUPABASE_URL', 'postgresql://postgres:9LGOLc9kNBVG5K0D@db.qnwbnuysfiihzsozallu.supabase.co:5432/postgres')
 
 # --- Configuración para Subida de Archivos ---
-UPLOAD_FOLDER = 'uploads'
+# En Vercel el disco es de solo lectura, usamos /tmp si falla
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-# Nos aseguramos de que la carpeta de subidas exista.
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+try:
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+except OSError:
+    # Entornos serverless como Vercel bloquean la creación de carpetas, lo ignoramos.
+    pass
 
 
 # --- VERSIÓN DE LA APP ---
@@ -121,17 +114,16 @@ def logout():
 
 def guardar_comprobante(file_storage):
     """
-    Guarda un archivo de comprobante en la carpeta correspondiente de Google Drive.
-    Retorna el ID del archivo en Drive (string largo).
+    Guarda un archivo de comprobante en Supabase Storage (bucket 'comprobantes').
+    Retorna la ruta del archivo relativa al bucket (ej: '2024/03/abcd.pdf').
     Retorna None si no hay archivo o si ocurre un error.
     """
-    if not file_storage or file_storage.filename == '':
+    if not file_storage or getattr(file_storage, 'filename', '') == '':
         return None
 
     try:
-        drive_folder_id = os.environ.get('DRIVE_FOLDER_ID')
-        if not drive_folder_id or not DRIVE_SERVICE:
-            print("Error: DRIVE_FOLDER_ID no está configurado o el servicio no se inició.")
+        if not SUPABASE_PROJECT_URL or not SUPABASE_KEY:
+            print("Error: las credenciales de Supabase no están configuradas.")
             return None
 
         # 1. Generar un nombre de archivo seguro y único
@@ -139,27 +131,31 @@ def guardar_comprobante(file_storage):
         extension = os.path.splitext(original_filename)[1]
         unique_filename = f"{uuid.uuid4().hex}{extension}"
 
-        # 2. Configurar la metadata y el media para Drive
-        file_metadata = {
-            'name': unique_filename,
-            'parents': [drive_folder_id]
+        # Organizarlos por año/mes en el storage para mejor orden.
+        hoy = date.today()
+        storage_path = f"{hoy.year}/{hoy.month:02d}/{unique_filename}"
+        
+        # 2. Leemos el contenido en bytes
+        file_content = file_storage.read()
+        
+        # 3. Subir el archivo al bucket correspondiente vía REST
+        url = f"{SUPABASE_PROJECT_URL}/storage/v1/object/{STORAGE_BUCKET}/{storage_path}"
+        headers = {
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "apikey": SUPABASE_KEY,
+            "Content-Type": file_storage.mimetype
         }
         
-        # Leemos el contenido en memoria para subirlo
-        file_content = file_storage.read()
-        media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=file_storage.mimetype, resumable=True)
-
-        # 3. Subir el archivo
-        file = DRIVE_SERVICE.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
+        res = requests.post(url, headers=headers, data=file_content)
         
-        # Devolvemos solo el ID del archivo, esto es lo que se guardará en la base de datos
-        return file.get('id')
+        if res.status_code == 200:
+            # Devolvemos la ruta relativa generada para guardarla en la base de datos
+            return storage_path
+        else:
+            print(f"Error HTTP al guardar en Supabase: {res.text}")
+            return None
     except Exception as e:
-        print(f"Error al guardar el archivo en Google Drive: {e}")
+        print(f"Error al guardar el archivo en Supabase Storage: {e}")
         return None
 
 # --- Rutas Principales (Frontend y API) ---
@@ -716,18 +712,85 @@ def pagar_resumen_tarjeta():
 @app.route('/uploads/<path:filepath>')
 @login_required
 def serve_upload(filepath):
-    """Sirve un archivo desde local o desde Google Drive si es un ID."""
-    if len(filepath) > 20 and '/' not in filepath and DRIVE_SERVICE:
-        try:
-            req_media = DRIVE_SERVICE.files().get_media(fileId=filepath)
-            file_bytes = req_media.execute()
-            file_meta = DRIVE_SERVICE.files().get(fileId=filepath, fields='name, mimeType').execute()
-            return send_file(io.BytesIO(file_bytes), mimetype=file_meta.get('mimeType'), download_name=file_meta.get('name'))
-        except Exception as e:
-            print(f"Error sirviendo desde Drive: {e}")
-            abort(404)
-    else:
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
+    """Sirve un archivo desde local histórico, o Supabase Storage."""
+    
+    # 1. Chequeamos si el archivo fue depurado y está en el RESPALDO LOCAL
+    local_archive_path = os.environ.get('LOCAL_ARCHIVE_PATH', 'C:\\MisRespaldos\\Gastos')
+    safe_filename = secure_filename(filepath.replace('/', '_'))
+    full_local_path = os.path.join(local_archive_path, safe_filename)
+    
+    if os.path.exists(full_local_path):
+        return send_file(full_local_path)
+
+    # 2. Si no está en local, intentamos con Supabase (en la nube)
+    if '/' in filepath and SUPABASE_PROJECT_URL:
+        # Re-dirigimos a la URL pública de Supabase Storage
+        public_url = f"{SUPABASE_PROJECT_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{filepath}"
+        return redirect(public_url)
+            
+    # Fallback a archivos locales antiguos genéricos
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
+
+# --- API DE ADMINISTRACION ---
+@app.route('/api/admin/depurar_comprobantes', methods=['POST'])
+@login_required
+def depurar_comprobantes():
+    """Busca comprobantes de más de 12 meses, los respalda en PC local y los borra de Supabase Storage."""
+    try:
+        if not SUPABASE_PROJECT_URL or not SUPABASE_KEY:
+            return jsonify({"error": "Credenciales HTTP de Supabase no configuradas."}), 500
+            
+        local_archive_path = os.environ.get('LOCAL_ARCHIVE_PATH', 'C:\\MisRespaldos\\Gastos')
+        if not os.path.exists(local_archive_path):
+            os.makedirs(local_archive_path)
+
+        # Hace un año exacto
+        fecha_limite = date.today() - timedelta(days=365)
+        
+        db = get_db()
+        cursor = db.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT id, comprobante_path FROM transacciones WHERE fecha < %s AND comprobante_path IS NOT NULL", (fecha_limite,))
+        transacciones = cursor.fetchall()
+
+        archivos_depurados = 0
+        for tx in transacciones:
+            path = tx['comprobante_path']
+            # Ignorar si es un archivo local antiguo (no contiene '/')
+            if '/' not in path: continue
+            
+            try:
+                # 1. Descargar de Supabase (URL Pública)
+                public_url = f"{SUPABASE_PROJECT_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{path}"
+                res_dl = requests.get(public_url)
+                if res_dl.status_code != 200:
+                    print(f"No se pudo descargar {path}")
+                    continue
+                
+                # 2. Guardar en local
+                safe_filename = secure_filename(path.replace('/', '_'))
+                full_local_path = os.path.join(local_archive_path, safe_filename)
+                with open(full_local_path, 'wb') as f:
+                    f.write(res_dl.content)
+                
+                # 3. Borrar de Supabase Storage para liberar espacio vía REST
+                delete_url = f"{SUPABASE_PROJECT_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
+                headers = {
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "apikey": SUPABASE_KEY
+                }
+                requests.delete(delete_url, headers=headers)
+                
+                # OJO: NO hacemos UPDATE a NULL porque queremos que la DB y el UI sigan teniendo el dato. 
+                # Cuando el usuario quiera verlo, `serve_upload` lo buscará en disco local primero.
+                
+                archivos_depurados += 1
+            except Exception as e:
+                print(f"Error depurando comprobante {path}: {e}")
+        
+        db.commit()
+        return jsonify({"mensaje": f"Depuración exitosa: {archivos_depurados} comprobantes locales respaldados y borrados de la nube."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- === API DE WEBAUTHN (AUTENTICACIÓN BIOMÉTRICA) === ---
 
