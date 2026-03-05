@@ -43,7 +43,7 @@ except OSError:
 
 
 # --- VERSIÓN DE LA APP ---
-APP_VERSION = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).strftime("%Y%m%d%H%M%S")
+APP_VERSION = "v3.0.0"
 
 # --- SEGURIDAD ---
 app.secret_key = 'mi_clave_secreta_desarrollo_local'
