@@ -266,8 +266,9 @@ def eliminar_transaccion(id):
 
         # Medida de seguridad: Verificar si la transacción está vinculada a un pago recurrente.
         # Si lo está, no se debe permitir su eliminación para evitar inconsistencias.
-        cursor.execute("SELECT COUNT(*) FROM pagos_recurrentes_log WHERE transaccion_id = %s", (id,))
-        if cursor.fetchone()[0] > 0:
+        cursor.execute("SELECT COUNT(*) as count FROM pagos_recurrentes_log WHERE transaccion_id = %s", (id,))
+        res = cursor.fetchone()
+        if res and res['count'] > 0:
             return jsonify({ "error": "No se puede eliminar. Este movimiento está asociado a un pago recurrente o de tarjeta. Elimine el pago desde el panel de recurrentes si es necesario." }), 409 # 409 Conflict
 
         # Si no está vinculada, proceder con la eliminación.
