@@ -247,13 +247,60 @@ def get_transacciones():
         # Formateamos fecha a YYYY-MM-DD para el frontend
         # Añadimos la columna comprobante_path a la consulta
         cursor.execute("""
-            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, TO_CHAR(t.fecha, 'YYYY-MM-DD') AS fecha, c.nombre AS categoria_nombre, t.comprobante_path
+            SELECT t.id, t.descripcion, t.monto, t.tipo, t.moneda, TO_CHAR(t.fecha, 'YYYY-MM-DD') AS fecha, 
+                   c.nombre AS categoria_nombre, t.categoria_id, t.comprobante_path
             FROM transacciones AS t 
             LEFT JOIN categorias AS c ON t.categoria_id = c.id
             ORDER BY t.fecha DESC, t.id DESC
         """)
         transacciones = [dict(fila) for fila in cursor.fetchall()]
         return jsonify(transacciones), 200
+    except Exception as e:
+        return jsonify({ "error": f"Error inesperado: {e}" }), 500
+
+@app.route('/api/transaccion/<int:id>', methods=['PUT'])
+@login_required
+def editar_transaccion(id):
+    try:
+        # Usamos request.form porque puede venir con archivo (multipart/form-data)
+        datos = request.form
+        descripcion = datos.get('descripcion')
+        monto = datos.get('monto')
+        categoria_id = datos.get('categoria_id')
+        moneda = datos.get('moneda')
+        comprobante_file = request.files.get('comprobante')
+
+        if not descripcion or not monto:
+            return jsonify({ "error": "Descripción y monto son obligatorios." }), 400
+
+        db = get_db()
+        cursor = db.cursor(cursor_factory=RealDictCursor)
+
+        # 1. Verificar que la transacción existe
+        cursor.execute("SELECT * FROM transacciones WHERE id = %s", (id,))
+        transaccion = cursor.fetchone()
+        if not transaccion:
+            return jsonify({ "error": "Transacción no encontrada." }), 404
+
+        # 2. Manejar el archivo comprobante (si se subió uno nuevo)
+        comprobante_path = transaccion['comprobante_path']
+        if comprobante_file:
+            nuevo_path = guardar_comprobante(comprobante_file)
+            if nuevo_path:
+                comprobante_path = nuevo_path
+
+        monto_float = float(monto)
+        categoria_id_int = int(categoria_id) if categoria_id else None
+
+        # 3. Actualizar la transacción
+        cursor.execute("""
+            UPDATE transacciones 
+            SET descripcion = %s, monto = %s, categoria_id = %s, comprobante_path = %s, moneda = COALESCE(%s, moneda)
+            WHERE id = %s
+        """, (descripcion, monto_float, categoria_id_int, comprobante_path, moneda, id))
+        
+        db.commit()
+        return jsonify({ "mensaje": "Transacción actualizada exitosamente" }), 200
     except Exception as e:
         return jsonify({ "error": f"Error inesperado: {e}" }), 500
 
@@ -685,7 +732,7 @@ def pagar_resumen_tarjeta():
 
             # 3. Crear la descripción de la transacción
             detalles = ", ".join(nombres_planes)
-            monto_otros = monto_pagado - monto_total_cuotas
+            monto_otros = monto_pagado - float(monto_total_cuotas)
             desc = f"Resumen {tarjeta['descripcion']} ({moneda_pago})"
             if detalles: desc += f" (Cuotas: {detalles})"
             if monto_otros > 0:

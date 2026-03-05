@@ -362,6 +362,45 @@
     </div>
     <!-- === FIN MODAL DE PAGO GENÉRICO === -->
 
+    <!-- === MODAL DE EDICIÓN DE TRANSACCIÓN === -->
+    <div id="modal-editar-transaccion" class="confirm-overlay" style="display: none; opacity: 0;">
+        <div class="confirm-dialog" style="max-width: 500px; text-align: left;">
+            <h3 style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Editar Movimiento</h3>
+            <form id="form-editar-transaccion" enctype="multipart/form-data">
+                <input type="hidden" id="editar-id" name="id">
+                <div style="margin-bottom: 15px;">
+                    <label for="editar-descripcion">Descripción:</label>
+                    <input type="text" id="editar-descripcion" name="descripcion" required style="width: 100%;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="editar-monto">Monto:</label>
+                    <input type="number" id="editar-monto" name="monto" step="0.01" required style="width: 100%;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="editar-categoria">Categoría:</label>
+                    <select id="editar-categoria" name="categoria_id" required style="width: 100%;"></select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="editar-moneda">Moneda:</label>
+                    <select id="editar-moneda" name="moneda" style="width: 100%;">
+                        <option value="ARS">ARS</option>
+                        <option value="USD">USD</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="editar-comprobante">Nuevo Comprobante (Opcional):</label>
+                    <input type="file" id="editar-comprobante" name="comprobante" accept="image/*,.pdf"
+                        style="width: 100%;">
+                </div>
+                <div class="form-buttons" style="margin-top: 25px;">
+                    <button type="submit" class="btn-primary" id="btn-submit-editar">Guardar Cambios</button>
+                    <button type="button" class="btn-secondary" id="btn-cancelar-edicion-transaccion">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- === FIN MODAL DE EDICIÓN === -->
+
     <!-- Pie de página con versión -->
     <footer style="text-align: center; margin: 40px 0 20px; color: #95a5a6; font-size: 0.85em;">
         <p>Control de Gastos &copy; 2025 - Versión <strong>{{ version }}</strong></p>

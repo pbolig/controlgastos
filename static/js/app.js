@@ -204,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Añadimos el botón de eliminar
         const deleteBtn = `<button class="btn-accion btn-eliminar-transaccion" data-id="${t.id}" title="Eliminar Movimiento">❌</button>`;
+        const editBtn = `<button class="btn-accion btn-editar-transaccion" data-json='${JSON.stringify(t).replace(/'/g, "&#39;")}' title="Editar Movimiento">✏️</button>`;
 
         return `
             <tr>
@@ -211,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${t.categoria_nombre || 'N/A'}</td> <td>${t.tipo}</td>
                 <td style="color:${color}">${t.tipo === 'gasto' ? '-' : '+'}${formatearMoneda(t.monto, mon)}</td>
                 <td>${comprobanteBtn}</td>
-                <td>${deleteBtn}</td>
+                <td>${editBtn} ${deleteBtn}</td>
             </tr>`;
     }
 
@@ -491,6 +492,27 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const accionesTransacciones = {
+        'btn-editar-transaccion': (target) => {
+            const data = JSON.parse(target.dataset.json);
+            const modal = document.getElementById('modal-editar-transaccion');
+
+            document.getElementById('editar-id').value = data.id;
+            document.getElementById('editar-descripcion').value = data.descripcion;
+            document.getElementById('editar-monto').value = data.monto;
+
+            const selectMoneda = document.getElementById('editar-moneda');
+            if (selectMoneda) selectMoneda.value = data.moneda || 'ARS';
+
+            const selectCategoria = document.getElementById('editar-categoria');
+            selectCategoria.innerHTML = document.getElementById('categoria').innerHTML; // Clonar opciones de categoria existentes
+            selectCategoria.value = data.categoria_id || '';
+
+            // Limpiar file input por si las dudas
+            document.getElementById('editar-comprobante').value = '';
+
+            modal.style.display = 'flex';
+            setTimeout(() => modal.style.opacity = '1', 10);
+        },
         'btn-eliminar-transaccion': async (target) => {
             if (confirm('¿Seguro que quieres eliminar este movimiento? Esta acción no se puede deshacer.')) {
                 try {
@@ -558,7 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 divListaCuotas.innerHTML = '<p class="no-cuotas">No hay cuotas pendientes para este resumen.</p>';
             } else {
                 pendientes.forEach(p => {
-                    totalCuotas += p.monto_cuota;
+                    totalCuotas += parseFloat(p.monto_cuota || 0);
                     const div = document.createElement('div');
                     div.className = 'cuota-item-info'; // Nueva clase para solo mostrar info
                     div.innerHTML = `<strong>${p.descripcion}</strong> (${p.cuota_actual + 1}/${p.total_cuotas}) <span class="monto">${formatearMoneda(p.monto_cuota, p.moneda)}</span>`;
@@ -567,7 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             spanTotalCuotas.textContent = formatearMoneda(totalCuotas, pendientes[0]?.moneda || 'ARS');
-            inputMontoPagado.value = totalCuotas.toFixed(2); // Sugerimos el monto total de cuotas
+            inputMontoPagado.value = Number(totalCuotas).toFixed(2); // Sugerimos el monto total de cuotas
 
         } catch (error) {
             console.error("Error al abrir modal de tarjeta:", error);
@@ -789,6 +811,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // --- Funcionalidad extra: Formulario Editar Transaccion ---
+        const formEditarTransaccion = document.getElementById('form-editar-transaccion');
+        const modalEditarTransaccion = document.getElementById('modal-editar-transaccion');
+        const btnCancelarEdicionTransaccion = document.getElementById('btn-cancelar-edicion-transaccion');
+
+        if (btnCancelarEdicionTransaccion) {
+            btnCancelarEdicionTransaccion.addEventListener('click', () => {
+                modalEditarTransaccion.style.opacity = '0';
+                setTimeout(() => modalEditarTransaccion.style.display = 'none', 200);
+            });
+        }
+
+        if (formEditarTransaccion) {
+            formEditarTransaccion.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('editar-id').value;
+                const formData = new FormData(formEditarTransaccion);
+
+                try {
+                    const data = await apiCall(`/api/transaccion/${id}`, 'PUT', formData);
+                    mostrarMensaje(data.mensaje);
+                    modalEditarTransaccion.style.opacity = '0';
+                    setTimeout(() => modalEditarTransaccion.style.display = 'none', 200);
+                    refrescarPaneles();
+                } catch (error) {
+                    mostrarMensaje("Error al actualizar la transacción", true);
+                }
+            });
+        }
+
         // --- Funcionalidad extra: Cerrar modales con la tecla 'Escape' ---
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -801,6 +853,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (modalPagoGenerico && modalPagoGenerico.style.display === 'flex') {
                     btnCerrarPagoGenerico.click();
+                }
+                if (modalEditarTransaccion && modalEditarTransaccion.style.display === 'flex') {
+                    btnCancelarEdicionTransaccion.click();
                 }
             }
         });
